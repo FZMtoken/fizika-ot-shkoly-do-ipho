@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from .models import Watch
+from .models import JetWatch, Watch
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS watches (
@@ -30,6 +30,18 @@ CREATE TABLE IF NOT EXISTS price_history (
     observed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_price_history ON price_history(route, cabin, currency);
+CREATE TABLE IF NOT EXISTS jet_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    origins TEXT NOT NULL,
+    destinations TEXT NOT NULL,
+    date_from TEXT NOT NULL,
+    date_to TEXT NOT NULL,
+    max_price REAL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    min_seats INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS notified (
     key TEXT PRIMARY KEY,
     created_at TEXT NOT NULL
@@ -113,9 +125,57 @@ class Database:
         return cur.rowcount > 0
 
     async def delete_expired_watches(self, today: date) -> int:
-        cur = await self.conn.execute("DELETE FROM watches WHERE date_to < ?", (today.isoformat(),))
+        n = 0
+        for table in ("watches", "jet_watches"):
+            cur = await self.conn.execute(
+                f"DELETE FROM {table} WHERE date_to < ?", (today.isoformat(),)
+            )
+            n += cur.rowcount
         await self.conn.commit()
-        return cur.rowcount
+        return n
+
+    # --- подписки на джеты ---
+    async def add_jet_watch(self, w: JetWatch) -> int:
+        cur = await self.conn.execute(
+            "INSERT INTO jet_watches (user_id, origins, destinations, date_from, date_to, "
+            "max_price, currency, min_seats, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                w.user_id, ",".join(w.origins), ",".join(w.destinations), w.date_from.isoformat(),
+                w.date_to.isoformat(), w.max_price, w.currency, w.min_seats, _now(),
+            ),
+        )
+        await self.conn.commit()
+        w.id = cur.lastrowid
+        return w.id
+
+    async def list_jet_watches(self, user_id: int | None = None) -> list[JetWatch]:
+        sql = (
+            "SELECT id, user_id, origins, destinations, date_from, date_to, max_price, currency, "
+            "min_seats "
+            "FROM jet_watches"
+        )
+        args: tuple = ()
+        if user_id is not None:
+            sql, args = sql + " WHERE user_id=?", (user_id,)
+        async with self.conn.execute(sql + " ORDER BY id", args) as cur:
+            rows = await cur.fetchall()
+        return [
+            JetWatch(
+                id=r[0], user_id=r[1],
+                origins=[c for c in r[2].split(",") if c],
+                destinations=[c for c in r[3].split(",") if c],
+                date_from=date.fromisoformat(r[4]), date_to=date.fromisoformat(r[5]),
+                max_price=r[6], currency=r[7], min_seats=r[8],
+            )
+            for r in rows
+        ]
+
+    async def delete_jet_watch(self, watch_id: int, user_id: int) -> bool:
+        cur = await self.conn.execute(
+            "DELETE FROM jet_watches WHERE id=? AND user_id=?", (watch_id, user_id)
+        )
+        await self.conn.commit()
+        return cur.rowcount > 0
 
     # --- история цен ---
     async def add_price(self, route: str, cabin: str, currency: str, price: float) -> None:

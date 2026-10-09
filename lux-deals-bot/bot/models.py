@@ -91,3 +91,44 @@ class PositioningDeal:
     @property
     def saving_pct(self) -> int:
         return round(self.saving / self.direct_price * 100)
+
+
+JET_CATEGORIES = {
+    "light": "лёгкий",
+    "midsize": "средний",
+    "super-midsize": "средний+",
+    "heavy": "большой",
+    "ultra-long-range": "сверхдальний",
+}
+
+
+@dataclass
+class EmptyLeg:
+    """Перегоночный рейс частного джета (empty leg), продаётся со скидкой."""
+
+    id: str
+    origin: str
+    destination: str
+    date_from: date  # самая ранняя дата вылета
+    date_to: date  # самая поздняя (у empty legs дата часто гибкая)
+    aircraft: str
+    seats: int
+    operator: str
+    url: str
+    category: str = ""
+    price: float | None = None  # None = цена по запросу
+    currency: str = "USD"
+    source: str = "feed"
+
+
+@dataclass
+class JetWatch:
+    id: int | None
+    user_id: int
+    origins: list[str]
+    destinations: list[str]  # пустой список = куда угодно
+    date_from: date
+    date_to: date
+    max_price: float | None = None
+    currency: str = "USD"  # валюта лимита
+    min_seats: int = 1

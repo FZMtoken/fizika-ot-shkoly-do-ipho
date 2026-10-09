@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from .models import AwardOffer, FlightOffer, PositioningDeal, PriceDeal
+from .models import AwardOffer, EmptyLeg, FlightOffer, JetWatch, PositioningDeal, PriceDeal
 
 
 def sample_dates(date_from: date, date_to: date, max_n: int, today: date | None = None) -> list[date]:
@@ -63,3 +63,28 @@ def filter_awards(offers: list[AwardOffer], max_miles: int, limit: int = 5) -> l
     good = [o for o in offers if o.miles <= max_miles and o.seats > 0]
     good.sort(key=lambda o: (o.miles, not o.direct, o.day))
     return good[:limit]
+
+
+def match_empty_legs(
+    legs: list[EmptyLeg], w: JetWatch, today: date | None = None
+) -> list[EmptyLeg]:
+    """Рейсы из нужных аэропортов в нужные даты, подходящие по местам и цене."""
+    today = today or date.today()
+    out = []
+    for leg in legs:
+        if leg.origin not in w.origins:
+            continue
+        if w.destinations and leg.destination not in w.destinations:
+            continue
+        # окно вылета пересекается с периодом пользователя и ещё не прошло
+        if leg.date_to < max(w.date_from, today) or leg.date_from > w.date_to:
+            continue
+        if leg.seats < w.min_seats:
+            continue
+        if w.max_price is not None:
+            # «цена по запросу» и цены в другой валюте не можем сравнить с лимитом — пропускаем
+            if leg.price is None or leg.currency != w.currency or leg.price > w.max_price:
+                continue
+        out.append(leg)
+    out.sort(key=lambda l: (l.date_from, l.price if l.price is not None else float("inf")))
+    return out

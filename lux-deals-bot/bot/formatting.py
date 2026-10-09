@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from html import escape
 
-from .models import CABIN_LABELS, AwardOffer, FlightOffer, PositioningDeal, PriceDeal, Watch
+from .models import (
+    CABIN_LABELS,
+    JET_CATEGORIES,
+    AwardOffer,
+    EmptyLeg,
+    FlightOffer,
+    JetWatch,
+    PositioningDeal,
+    PriceDeal,
+    Watch,
+)
 
 
 def money(amount: float, currency: str) -> str:
@@ -81,6 +91,43 @@ def awards_message(watch: Watch, awards: list[AwardOffer], demo: bool = False) -
     lines.append(
         "\nБронируйте на сайте программы лояльности. Мили часто можно получить, "
         "переведя баллы банковских карт (Amex, Chase, Citi и т.п.)."
+    )
+    return "\n".join(lines)
+
+
+def jet_watch_line(w: JetWatch) -> str:
+    dest = ", ".join(w.destinations) if w.destinations else "куда угодно"
+    limit = f", до {money(w.max_price, w.currency)}" if w.max_price else ""
+    seats = f", от {w.min_seats} мест" if w.min_seats > 1 else ""
+    return (
+        f"🛩 #{w.id} {', '.join(w.origins)} → {dest}, "
+        f"{w.date_from:%d.%m}–{w.date_to:%d.%m.%Y}{seats}{limit}"
+    )
+
+
+def _leg_dates(leg: EmptyLeg) -> str:
+    if leg.date_from == leg.date_to:
+        return f"{leg.date_from:%d.%m.%Y}"
+    return f"{leg.date_from:%d.%m}–{leg.date_to:%d.%m.%Y} (гибкая дата)"
+
+
+def empty_legs_message(legs: list[EmptyLeg], demo: bool = False, more: int = 0) -> str:
+    lines = [f"🛩 <b>Частный джет по цене перегона (empty leg)</b>{_demo(demo)}\n"]
+    for leg in legs:
+        price = money(leg.price, leg.currency) if leg.price is not None else "цена по запросу"
+        cat = JET_CATEGORIES.get(leg.category, leg.category)
+        cat = f", {cat}" if cat else ""
+        link = f' — <a href="{escape(leg.url)}">подробнее</a>' if leg.url else ""
+        lines.append(
+            f"• {leg.origin} → {leg.destination}, {_leg_dates(leg)}\n"
+            f"  {escape(leg.aircraft)}{cat}, до {leg.seats} пасс., <b>{price}</b> за весь борт, "
+            f"{escape(leg.operator)}{link}"
+        )
+    if more:
+        lines.append(f"\n…и ещё {more} — пришлю при следующей проверке или сузьте подписку.")
+    lines.append(
+        "\nЦена за весь самолёт, делится на всех пассажиров. Empty leg могут отменить, "
+        "если основной рейс клиента перенесут, — держите запасной вариант."
     )
     return "\n".join(lines)
 

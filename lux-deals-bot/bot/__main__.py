@@ -12,7 +12,7 @@ from .config import Settings
 from .db import Database
 from .handlers import router
 from .monitor import Monitor
-from .providers import build_providers
+from .providers import build_empty_legs_provider, build_providers
 
 
 async def main() -> None:
@@ -26,7 +26,8 @@ async def main() -> None:
     db = Database(settings.db_path)
     await db.connect()
     flights, awards = build_providers(settings)
-    monitor = Monitor(settings, db, flights, awards)
+    empty_legs = build_empty_legs_provider(settings)
+    monitor = Monitor(settings, db, flights, awards, empty_legs)
 
     bot = Bot(
         settings.telegram_token,
@@ -48,6 +49,7 @@ async def main() -> None:
         await flights.close()
         if awards:
             await awards.close()
+        await empty_legs.close()
         await db.close()
         await bot.session.close()
 

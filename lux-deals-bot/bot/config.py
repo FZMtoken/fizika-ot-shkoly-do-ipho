@@ -31,6 +31,7 @@ class Settings:
     deal_threshold: float = 0.7
     positioning_min_saving: float = 0.15
     positioning_hubs: list[str] = field(default_factory=lambda: list(DEFAULT_POSITIONING_HUBS))
+    empty_legs_feed: str = ""
     award_max_miles: dict[str, int] = field(
         default_factory=lambda: {"business": 90_000, "first": 130_000}
     )
@@ -54,6 +55,7 @@ class Settings:
             deal_threshold=_float("DEAL_THRESHOLD", 0.7),
             positioning_min_saving=_float("POSITIONING_MIN_SAVING", 0.15),
             positioning_hubs=hubs or list(DEFAULT_POSITIONING_HUBS),
+            empty_legs_feed=os.getenv("EMPTY_LEGS_FEED", "").strip(),
             award_max_miles={
                 "business": _int("AWARD_MAX_MILES_BUSINESS", 90_000),
                 "first": _int("AWARD_MAX_MILES_FIRST", 130_000),

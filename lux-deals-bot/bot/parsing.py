@@ -48,3 +48,28 @@ def parse_price(text: str) -> float | None:
     if value <= 0:
         raise ValueError
     return value
+
+
+CURRENCIES = {"USD", "EUR", "GBP", "CHF", "AED"}
+
+
+def parse_iata_list(text: str) -> list[str] | None:
+    """'LTN, FAB LHR' -> ['LTN', 'FAB', 'LHR']; None, если есть неверный код."""
+    parts = [p for p in re.split(r"[\s,;]+", text.strip()) if p]
+    codes = [parse_iata(p) for p in parts]
+    if not codes or None in codes or len(codes) > 10:
+        return None
+    return list(dict.fromkeys(codes))
+
+
+def parse_price_currency(text: str, default: str = "USD") -> tuple[float | None, str]:
+    """'8000 EUR' -> (8000.0, 'EUR'); '-' -> (None, default). ValueError при ошибке."""
+    t = text.strip().upper()
+    currency = default
+    m = re.search(r"([A-Z]{3})$", t)
+    if m:
+        if m.group(1) not in CURRENCIES:
+            raise ValueError
+        currency = m.group(1)
+        t = t[: m.start()].strip()
+    return parse_price(t), currency

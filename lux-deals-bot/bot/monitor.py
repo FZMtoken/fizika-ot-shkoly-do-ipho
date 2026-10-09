@@ -9,10 +9,12 @@ from typing import Awaitable, Callable
 from . import deals, formatting
 from .config import Settings
 from .db import Database
-from .models import FlightOffer, Watch
-from .providers import AwardProvider, FlightProvider
+from .models import FlightOffer, JetWatch, Watch
+from .providers import AwardProvider, EmptyLegProvider, FlightProvider
 
 log = logging.getLogger(__name__)
+
+MAX_LEGS_PER_MESSAGE = 6
 
 SendFn = Callable[[int, str], Awaitable[None]]
 
@@ -30,11 +32,13 @@ class Monitor:
         db: Database,
         flights: FlightProvider,
         awards: AwardProvider | None,
+        empty_legs: EmptyLegProvider | None = None,
     ):
         self.settings = settings
         self.db = db
         self.flights = flights
         self.awards = awards
+        self.empty_legs = empty_legs
 
     async def _cheapest(self, origin: str, destination: str, day: date, cabin: str) -> FlightOffer | None:
         return deals.cheapest(await self.flights.search(origin, destination, day, cabin))
@@ -106,19 +110,51 @@ class Monitor:
 
         return result
 
+    async def check_jet_watch(
+        self, w: JetWatch, legs=None, dedupe: bool = True, today: date | None = None
+    ) -> list[str]:
+        if not self.empty_legs:
+            return []
+        if legs is None:
+            legs = await self.empty_legs.fetch()
+        fresh, more = [], 0
+        for leg in deals.match_empty_legs(legs, w, today):
+            if len(fresh) >= MAX_LEGS_PER_MESSAGE:
+                more += 1  # не помечаем: покажем при следующей проверке
+                continue
+            key = f"jet:{w.id}:{leg.source}:{leg.id}:{leg.price}"
+            if await self.db.mark_notified(key) or not dedupe:
+                fresh.append(leg)
+        if not fresh:
+            return []
+        return [formatting.empty_legs_message(fresh, self.empty_legs.is_demo, more)]
+
     async def run_once(self, send: SendFn) -> None:
         await self.db.delete_expired_watches(date.today())
+
+        async def deliver(user_id: int, messages: list[str]) -> None:
+            for msg in messages:
+                try:
+                    await send(user_id, msg)
+                except Exception:
+                    log.exception("Не удалось отправить сообщение пользователю %s", user_id)
+
         for w in await self.db.list_watches():
             try:
                 res = await self.check_watch(w)
             except Exception:
                 log.exception("Ошибка проверки подписки #%s", w.id)
                 continue
-            for msg in res.messages:
+            await deliver(w.user_id, res.messages)
+
+        jet_watches = await self.db.list_jet_watches()
+        if jet_watches and self.empty_legs:
+            legs = await self.empty_legs.fetch()  # один запрос фида на всех подписчиков
+            for jw in jet_watches:
                 try:
-                    await send(w.user_id, msg)
+                    await deliver(jw.user_id, await self.check_jet_watch(jw, legs))
                 except Exception:
-                    log.exception("Не удалось отправить сообщение пользователю %s", w.user_id)
+                    log.exception("Ошибка проверки джет-подписки #%s", jw.id)
 
     async def run_forever(self, send: SendFn) -> None:
         while True:
