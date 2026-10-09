@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разгоняющийся диск</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Разгоняющийся диск</h1>
+  <p class="lead">Диск радиусом 1 м вращается вокруг оси. У выбранной точки показаны скорость v (синяя), касательное ускорение a<sub>τ</sub> (оранжевое), нормальное a<sub>n</sub> (зелёное) и полное a (красное). Длины стрелок в своём масштабе, важны направления и пропорции.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Начальная угловая скорость ω₀</i><span id="w0o"></span><input id="w0" type="range" min="0" max="10" step="0.5" value="0"></label>
+      <label><i>Угловое ускорение ε</i><span id="eo"></span><input id="e" type="range" min="-3" max="3" step="0.1" value="2"></label>
+      <label><i>Расстояние точки от оси r</i><span id="ro"></span><input id="r" type="range" min="0.2" max="1" step="0.1" value="1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Разгони диск из покоя с ε = 2 рад/с². Как меняется направление полного ускорения точки со временем?</li>
+      <li>Меняй расстояние точки от оси во время вращения. Что меняется, а что остаётся тем же?</li>
+      <li>Задай ω₀ = 10 рад/с и ε = −2 рад/с². Через сколько оборотов диск остановится? Проверь формулой ω₀² = 2|ε|φ.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['w0', 'e', 'r'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+const TMAX = 12;
+let t = 0, running = false, last = null;
+
+function state() {
+  const w0 = +$('w0').value, e = +$('e').value, r = +$('r').value;
+  let tt = t; if (e < 0 && w0 + e * tt < 0) tt = -w0 / e;        // при торможении диск останавливается
+  const w = w0 + e * tt, phi = w0 * tt + e * tt * tt / 2;
+  const stopped = e < 0 && w <= 1e-9;
+  return { w0, e, r, w, phi, stopped, at: stopped ? 0 : e * r, an: w * w * r };
+}
+
+function arrow(g, x1, y1, dx, dy, col, lab) {
+  const L = Math.hypot(dx, dy); if (L < 2) return; const x2 = x1 + dx, y2 = y1 + dy, ux = dx / L, uy = dy / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 12, y2 + uy * 12 + 4); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = state(), sw = Math.min(W * 0.55, 420), R = Math.min(sw / 2 - 60, H / 2 - 60), cx = sw / 2, cy = H / 2;
+  // диск
+  g.fillStyle = '#e5e7eb'; g.strokeStyle = '#6b6b70'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill(); g.stroke();
+  g.strokeStyle = '#9ca3af'; g.lineWidth = 1;
+  for (let i = 0; i < 6; i++) { const a = -S.phi + i * Math.PI / 3; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a)); g.stroke(); }
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fill();
+  // точка (вращение против часовой стрелки: на экране угол −φ)
+  const a = -S.phi, px = cx + R * S.r * Math.cos(a), py = cy + R * S.r * Math.sin(a);
+  const tx = Math.sin(a), ty = -Math.cos(a), nx = -Math.cos(a), ny = -Math.sin(a);   // касательная (по вращению) и к центру
+  const v = S.w * S.r, A = Math.hypot(S.at, S.an), kv = 70 / Math.max(v, 1e-6, 1), ka = 70 / Math.max(A, 1e-6, 1);
+  arrow(g, px, py, tx * v * kv, ty * v * kv, '#2563eb', 'v');
+  arrow(g, px, py, tx * S.at * ka, ty * S.at * ka, '#ea580c', 'aτ');
+  arrow(g, px, py, nx * S.an * ka, ny * S.an * ka, '#16a34a', 'an');
+  arrow(g, px, py, (tx * S.at + nx * S.an) * ka, (ty * S.at + ny * S.an) * ka, '#dc2626', 'a');
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(px, py, 5, 0, 7); g.fill();
+  // график ω(t)
+  const gx = sw + 40, gw = W - gx - 16, gy = 30, gh = H - 70;
+  if (gw > 60) {
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+    const wmax = Math.max(10, S.w0 + Math.max(0, S.e) * TMAX), X = q => gx + gw * q / TMAX, Y = w => gy + gh - gh * w / wmax;
+    g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('ω, рад/с', gx + 4, gy - 8); g.textAlign = 'right'; g.fillText('t, с', gx + gw, gy + gh + 16);
+    g.fillText(fmt(wmax, 0), gx - 4, gy + 4); g.fillText('0', gx - 4, gy + gh + 4);
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+    for (let i = 0; i <= 120; i++) { const q = TMAX * i / 120; let w = S.w0 + S.e * q; if (w < 0) w = 0; i ? g.lineTo(X(q), Y(w)) : g.moveTo(X(q), Y(w)); } g.stroke();
+    g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(Math.min(t, TMAX)), Y(S.w), 4, 0, 7); g.fill();
+  }
+  // показания
+  $('w0o').textContent = fmt(S.w0, 1) + ' рад/с'; $('eo').textContent = fmt(S.e, 1) + ' рад/с²'; $('ro').textContent = fmt(S.r, 1) + ' м';
+  $('read').innerHTML = ro('время t', fmt(t, 2) + ' с') + ro('угловая скорость ω', fmt(S.w) + ' рад/с') + ro('угол φ', fmt(S.phi, 1) + ' рад') +
+    ro('оборотов', fmt(S.phi / (2 * Math.PI))) + ro('скорость точки v', fmt(v) + ' м/с') + ro('aτ', fmt(S.at) + ' м/с²') +
+    ro('an', fmt(S.an) + ' м/с²') + ro('полное a', fmt(A) + ' м/с²');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  t = Math.min(TMAX, t + dt); const S = state(); draw();
+  if (t >= TMAX || S.stopped) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  if (t >= TMAX || state().stopped) t = 0; running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+const reset = () => { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); reset(); };
+$('w0').oninput = reset; $('e').oninput = reset; $('r').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

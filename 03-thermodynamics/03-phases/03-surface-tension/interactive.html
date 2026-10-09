@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Капилляры</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Капилляры</h1>
+  <p class="lead">Три стеклянные трубки радиусами r, 2r и 4r опущены в жидкость. Нажми «Пуск»: смачивающая жидкость поднимается по трубкам, несмачивающая (ртуть) опускается. Высота подъёма h = 2σ·cos θ / (ρgr). Ширина трубок на рисунке увеличена.</p>
+
+  <div class="card">
+    <div class="seg" id="liq"></div>
+    <div class="controls">
+      <label><i>Радиус самой тонкой трубки r</i><span id="ro"></span><input id="r" type="range" min="0.1" max="1" step="0.05" value="0.25"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Во сколько раз отличаются высоты в трубках r и 4r? Проверь, что произведение r·h одинаково.</li>
+      <li>Замени воду спиртом. Почему спирт поднимается ниже, хотя он легче воды?</li>
+      <li>Выбери ртуть. Что изменилось? Почему мениск выпуклый?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const LIQ = [['вода', 0.073, 1000, 0, 'rgba(59,130,246,.55)'], ['спирт', 0.022, 800, 0, 'rgba(250,204,21,.55)'], ['мыльная вода', 0.040, 1000, 0, 'rgba(167,139,250,.55)'], ['ртуть', 0.47, 13600, 140, 'rgba(100,116,139,.85)']];
+let li = 0, t = 0, running = false, last = null;
+
+$('liq').innerHTML = LIQ.map((l, i) => `<button data-i="${i}">${l[0]}</button>`).join('');
+const segUpd = () => $('liq').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.i === li));
+$('liq').querySelectorAll('button').forEach(b => b.onclick = () => { li = +b.dataset.i; segUpd(); t = 0; draw(); });
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const [name, sig, rho, th, col] = LIQ[li], r = +$('r').value * 1e-3, cs = Math.cos(th * Math.PI / 180);
+  const hs = [1, 2, 4].map(k => 2 * sig * cs / (rho * 10 * r * k)), grow = 1 - Math.exp(-t / 0.8);
+  const hmaxCm = 2 * 0.073 / (1000 * 10 * 0.1e-3) * 100;           // 14,6 см — самый большой подъём (вода, r = 0,1 мм)
+  const surf = H * 0.62, pxPerCm = (surf - 30) / Math.max(4, Math.min(hmaxCm, Math.abs(hs[0]) * 100 * 1.15));
+  // сосуд
+  const vx = 30, vw = W - 60;
+  g.fillStyle = col; g.fillRect(vx, surf, vw, H - surf - 10);
+  g.strokeStyle = '#334155'; g.lineWidth = 3; g.beginPath(); g.moveTo(vx, surf - 30); g.lineTo(vx, H - 10); g.lineTo(vx + vw, H - 10); g.lineTo(vx + vw, surf - 30); g.stroke();
+  // трубки
+  hs.forEach((hh, i) => {
+    const cx = vx + vw * (i + 1) / 4, tw = 8 + 6 * [1, 2, 4][i], top = 14, bot = H - 40, lvl = surf - hh * 100 * pxPerCm * grow;
+    g.fillStyle = '#fff'; g.fillRect(cx - tw / 2, top, tw, bot - top);
+    g.fillStyle = col; g.fillRect(cx - tw / 2, Math.min(lvl, bot), tw, bot - Math.min(lvl, bot));
+    // мениск
+    g.fillStyle = cs >= 0 ? '#fff' : col; g.beginPath(); g.ellipse(cx, lvl, tw / 2, Math.min(tw / 2, 8) * Math.abs(cs) + 1, 0, cs >= 0 ? Math.PI : 0, cs >= 0 ? 2 * Math.PI : Math.PI); g.fill();
+    g.strokeStyle = '#64748b'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx - tw / 2, top); g.lineTo(cx - tw / 2, bot); g.moveTo(cx + tw / 2, top); g.lineTo(cx + tw / 2, bot); g.stroke();
+    g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'left';
+    g.fillText(['r', '2r', '4r'][i], cx + tw / 2 + 6, top + 12);
+    g.fillText(fmt(hh * 100 * grow, 2) + ' см', cx + tw / 2 + 6, Math.max(top + 28, Math.min(H - 16, lvl + 4)));
+  });
+  g.setLineDash([4, 4]); g.strokeStyle = '#94a3b8'; g.lineWidth = 1; g.beginPath(); g.moveTo(vx, surf); g.lineTo(vx + vw, surf); g.stroke(); g.setLineDash([]);
+  $('ro').textContent = fmt(r * 1000, 2) + ' мм';
+  $('read').innerHTML = ro('h в трубке r', fmt(hs[0] * 100, 2) + ' см') + ro('h в трубке 2r', fmt(hs[1] * 100, 2) + ' см') + ro('h в трубке 4r', fmt(hs[2] * 100, 2) + ' см') +
+    ro('r·h (одинаково)', fmt(r * 1000 * hs[0] * 1000, 2) + ' мм²') + ro('краевой угол θ', th + '°');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw();
+  if (t > 6) { running = false; $('play').textContent = '▶ Пуск'; return; } requestAnimationFrame(tick); }
+$('play').onclick = () => { if (!running && t > 6) t = 0; running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; li = 0; segUpd(); $('r').value = 0.25; t = 0; draw(); };
+$('r').oninput = () => { t = 10; draw(); };
+window.onresize = draw;
+segUpd(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Маятник: период и амплитуда</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Маятник: период и амплитуда</h1>
+  <p class="lead">Движение маятника считается точно, без приближения малых углов. Справа график угла от времени: синяя линия — точное движение, серая пунктирная — гармонические колебания с периодом 2π√(l/g).</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="math" class="on">Груз на нити</button><button data-k="rod">Стержень на оси</button></div>
+    <div class="seg" id="planet"><button data-g="10" class="on">Земля</button><button data-g="3.7">Марс</button><button data-g="1.62">Луна</button></div>
+    <div class="controls">
+      <label><i>Длина l</i><span id="lo"></span><input id="l" type="range" min="0.2" max="2" step="0.1" value="1"></label>
+      <label><i>Амплитуда</i><span id="ao"></span><input id="a" type="range" min="5" max="170" step="5" value="10"></label>
+      <label><i>Масса груза</i><span id="mo"></span><input id="m" type="range" min="0.1" max="2" step="0.1" value="0.5"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Измени массу груза. Меняется ли период? А если изменить длину?</li>
+      <li>Увеличивай амплитуду до 60° и 90°. На сколько процентов точный период больше 2π√(l/g)?</li>
+      <li>Перенеси маятник на Луну и на Марс. Во сколько раз изменился период? Сравни стержень и груз на нити той же длины.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const D = Math.PI / 180;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let kind = 'math', G = 10, t = 0, th = 0, om = 0, hist = [], running = true, last = null;
+
+const lp = () => kind === 'math' ? +$('l').value : 2 / 3 * +$('l').value;     // приведённая длина
+const w0 = () => Math.sqrt(G / lp());
+function exactT() {                                                          // точный период через полный эллиптический интеграл (AGM)
+  const k = Math.sin(+$('a').value * D / 2); let a = 1, b = Math.sqrt(1 - k * k);
+  for (let i = 0; i < 20; i++) { const an = (a + b) / 2; b = Math.sqrt(a * b); a = an; }
+  return 2 * Math.PI / w0() / a;
+}
+function reset() { t = 0; th = +$('a').value * D; om = 0; hist = [[0, th]]; draw(); }
+function step(dt) {
+  const n = 20, h = dt / n, w2 = G / lp(), f = (x) => -w2 * Math.sin(x);
+  for (let i = 0; i < n; i++) {                                              // Рунге — Кутта 4
+    const k1v = f(th), k1x = om, k2v = f(th + h / 2 * k1x), k2x = om + h / 2 * k1v, k3v = f(th + h / 2 * k2x), k3x = om + h / 2 * k2v, k4v = f(th + h * k3x), k4x = om + h * k3v;
+    th += h / 6 * (k1x + 2 * k2x + 2 * k3x + k4x); om += h / 6 * (k1v + 2 * k2v + 2 * k3v + k4v); t += h;
+  }
+  hist.push([t, th]); if (hist.length > 2000) hist.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const l = +$('l').value, sw = Math.min(W * 0.42, 320), px = sw / 2, py = 30, L = Math.min((H - 70) / 2.1, sw / 2 - 10) * l;
+  g.fillStyle = '#d9d6cc'; g.fillRect(px - 40, py - 10, 80, 10);
+  const ex = px + L * Math.sin(th), ey = py + L * Math.cos(th);
+  if (kind === 'math') { g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(px, py); g.lineTo(ex, ey); g.stroke();
+    g.fillStyle = '#2563eb'; g.beginPath(); g.arc(ex, ey, 6 + +$('m').value * 5, 0, 7); g.fill(); }
+  else { g.strokeStyle = '#8b6f3a'; g.lineWidth = 8; g.lineCap = 'round'; g.beginPath(); g.moveTo(px, py); g.lineTo(ex, ey); g.stroke(); g.lineCap = 'butt';
+    g.fillStyle = '#dc2626'; g.beginPath(); g.arc(px + L / 2 * Math.sin(th), py + L / 2 * Math.cos(th), 4, 0, 7); g.fill(); }
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
+  // график угла
+  const gx = sw + 30, gw = W - gx - 16, gy = 20, gh = H - 50;
+  if (gw > 80) {
+    const a0 = +$('a').value * D, span = 3 * 2 * Math.PI / w0(), X = q => gx + gw * (q % span) / span, Y = v => gy + gh / 2 - v / a0 * (gh / 2 - 6);
+    g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy + gh / 2); g.lineTo(gx + gw, gy + gh / 2); g.stroke();
+    g.setLineDash([5, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1.5; g.beginPath();
+    for (let j = 0; j <= 300; j++) { const q = span * j / 300; j ? g.lineTo(gx + gw * j / 300, Y(a0 * Math.cos(w0() * q))) : g.moveTo(gx, Y(a0)); } g.stroke(); g.setLineDash([]);
+    const t0 = Math.floor(t / span) * span; g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath(); let first = true;
+    hist.forEach(([q, v]) => { if (q < t0) return; first ? g.moveTo(X(q - t0), Y(v)) : g.lineTo(gx + gw * (q - t0) / span, Y(v)); first = false; }); g.stroke();
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('угол, окно — три периода малых колебаний', gx + 4, gy + 8);
+  }
+  const T0 = 2 * Math.PI / w0(), Te = exactT();
+  $('lo').textContent = fmt(l, 1) + ' м' + (kind === 'rod' ? ' (приведённая ' + fmt(lp()) + ' м)' : ''); $('ao').textContent = $('a').value + '°'; $('mo').textContent = fmt(+$('m').value, 1) + ' кг';
+  $('read').innerHTML = ro('2π√(l/g)', fmt(T0) + ' с') + ro('точный период', fmt(Te) + ' с') + ro('разница', '+' + fmt((Te / T0 - 1) * 100, 1) + ' %') +
+    ro('g', fmt(G) + ' м/с²') + ro('угол сейчас', fmt(th / D, 1) + '°');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { $('l').value = 1; $('a').value = 10; $('m').value = 0.5; reset(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; reset(); });
+$('planet').querySelectorAll('button').forEach(b => b.onclick = () => { $('planet').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); G = +b.dataset.g; reset(); });
+['l', 'a'].forEach(id => $(id).oninput = reset); $('m').oninput = draw;
+window.onresize = draw;
+reset(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

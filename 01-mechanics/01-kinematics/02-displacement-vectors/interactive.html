@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Переправа через реку</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 20px; margin:10px 0; }
+  label { display:block; font-weight:600; }
+  label span { font-weight:400; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .readout { font-variant-numeric:tabular-nums; margin-top:8px; }
+  .vp { color:#2563eb; font-weight:600; } .vu { color:#16a34a; font-weight:600; } .vv { color:#dc2626; font-weight:600; }
+  .task { border-left:4px solid #2563eb; }
+
+  /* Стабильная вёрстка: размеры блоков не зависят от значений, ничего не прыгает при движении ползунков и нажатии кнопок */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; color:var(--ink); }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  td, th { white-space:nowrap; }
+  #play { min-width: 7.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Переправа через реку</h1>
+  <p class="lead">Скорость лодки относительно берега = скорость относительно воды + скорость течения:
+    <span class="vv">v</span> = <span class="vp">v′</span> + <span class="vu">u</span>.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="frame">
+        <button data-v="shore" class="on">СО берега</button>
+        <button data-v="water">СО воды</button>
+      </div>
+      <button id="fast">Быстрее всего</button>
+      <button id="short">Кратчайший путь</button>
+    </div>
+    <div class="controls">
+      <label>Скорость лодки относительно воды v′: <span id="vpo"></span>
+        <input id="vp" type="range" min="1" max="6" step="0.5" value="3"></label>
+      <label>Скорость течения u: <span id="uo"></span>
+        <input id="u" type="range" min="0" max="6" step="0.5" value="1"></label>
+      <label>Угол носа лодки к перпендикуляру: <span id="phio"></span>
+        <input id="phi" type="range" min="-80" max="80" step="any" value="0"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Нос перпендикулярно берегу. Меняй скорость течения. Меняется ли время переправы? А снос?</li>
+      <li>Нажми «Кратчайший путь» при v′ = 5 м/с и u = 3 м/с. Куда смотрит нос лодки? Сравни время с переправой «быстрее всего».</li>
+      <li>Сделай течение быстрее лодки и снова нажми «Кратчайший путь». Можно ли теперь приплыть точно напротив?</li>
+      <li>Переключись в СО воды. По какой траектории плывёт лодка? Куда движутся берега?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const D = 100;                                   // ширина реки, м
+let frame = 'shore', vp, u, phi, t = 0, running = false, last = null;
+const fmt = (n, p = 1) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+
+function params() {
+  vp = +$('vp').value; u = +$('u').value; phi = +$('phi').value * Math.PI / 180;
+  $('vpo').textContent = fmt(vp) + ' м/с'; $('uo').textContent = fmt(u) + ' м/с';
+  const deg = Math.round(+$('phi').value * 10) / 10;
+  $('phio').textContent = deg === 0 ? '0°' : fmt(Math.abs(deg)) + '° ' + (deg < 0 ? 'против течения' : 'по течению');
+}
+// x — вдоль течения, y — поперёк реки от ближнего берега
+const vx = () => vp * Math.sin(phi) + u, vy = () => vp * Math.cos(phi);
+const Tcross = () => D / vy();
+const boat = tt => [vx() * tt, vy() * tt];
+const camX = tt => frame === 'water' ? u * tt : 0;   // камера едет вместе с водой
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const T = Tcross();
+  // масштаб подбираем так, чтобы весь путь в обеих СО помещался на экране
+  const xs = [0, vx() * T, vp * Math.sin(phi) * T];
+  const xmin = Math.min(...xs) - 30, xmax = Math.max(...xs) + 30;
+  const bank = 30, k = Math.min((H - 2 * bank - 20) / D, W / Math.max(xmax - xmin, 2.2 * D));
+  const midX = (xmin + xmax) / 2;
+  const sx = x => W / 2 + (x - camX(t) - midX) * k;
+  const sy = y => H - bank - 10 - y * k;
+
+  // берега и вода
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#d6e6f5'; g.fillRect(0, sy(D), W, sy(0) - sy(D));
+  // метки на берегах — через 20 м, привязаны к берегу
+  g.fillStyle = '#8a8a8a'; g.font = '11px system-ui'; g.textAlign = 'center';
+  const wx0 = (0 - W / 2) / k + camX(t) + midX, wx1 = (W - W / 2) / k + camX(t) + midX;
+  for (let x = Math.floor(wx0 / 20) * 20; x <= wx1; x += 20) {
+    g.fillRect(sx(x) - 1, sy(0), 2, 8); g.fillRect(sx(x) - 1, sy(D) - 8, 2, 8);
+    if (x % 40 === 0) g.fillText(x + ' м', sx(x), sy(0) + 22);
+  }
+  // поплавки — плывут вместе с водой
+  g.fillStyle = '#7aa7d6';
+  for (const yy of [D * .25, D * .5, D * .75]) {
+    const shift = u * t;
+    for (let x = Math.floor((wx0 - shift) / 25) * 25; x <= wx1 - shift + 25; x += 25) {
+      g.beginPath(); g.arc(sx(x + shift), sy(yy), 2.5, 0, 7); g.fill();
+    }
+  }
+  // точка старта и точка напротив (на берегу)
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(sx(0), sy(0), 4, 0, 7); g.fill();
+  g.strokeStyle = '#1d1d1f'; g.setLineDash([2, 4]); g.beginPath(); g.moveTo(sx(0), sy(0)); g.lineTo(sx(0), sy(D)); g.stroke(); g.setLineDash([]);
+
+  // след лодки в выбранной СО
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath();
+  const N = 120;
+  for (let i = 0; i <= N; i++) {
+    const tt = t * i / N, [x, y] = boat(tt), xf = x + (camX(t) - camX(tt));
+    i ? g.lineTo(sx(xf), sy(y)) : g.moveTo(sx(xf), sy(y));
+  }
+  g.stroke(); g.setLineDash([]);
+
+  // лодка, повёрнутая по направлению носа (v′)
+  const [bx, by] = boat(t), X = sx(bx), Y = sy(by);
+  g.save(); g.translate(X, Y); g.rotate(phi);
+  g.fillStyle = '#8b5a2b'; g.beginPath(); g.moveTo(0, -12); g.lineTo(6, 4); g.lineTo(6, 10); g.lineTo(-6, 10); g.lineTo(-6, 4); g.closePath(); g.fill();
+  g.restore();
+
+  // треугольник скоростей у лодки
+  const ks = 14;
+  const arrow = (x1, y1, x2, y2, col, lab, side = 1) => {
+    const L = Math.hypot(x2 - x1, y2 - y1); if (L < 2) return;
+    const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+    g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+    g.font = 'italic 600 15px serif'; g.textAlign = 'center'; g.fillText(lab, (x1 + x2) / 2 + side * uy * 14, (y1 + y2) / 2 - side * ux * 14 + 5); g.textAlign = 'left';
+  };
+  const pX = X + vp * Math.sin(phi) * ks, pY = Y - vp * Math.cos(phi) * ks;
+  if (frame === 'shore') {
+    arrow(X, Y, pX, pY, '#2563eb', 'v′');
+    arrow(pX, pY, pX + u * ks, pY, '#16a34a', 'u');
+    arrow(X, Y, X + vx() * ks, Y - vy() * ks, '#dc2626', 'v', -1);
+  } else {
+    arrow(X, Y, pX, pY, '#2563eb', 'v′');
+  }
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left';
+  g.fillText(frame === 'shore' ? 'Камера неподвижна относительно берега' : 'Камера плывёт вместе с водой', 10, 18);
+
+  const v = Math.hypot(vx(), vy());
+  $('read').innerHTML = ro('время переправы', fmt(T) + ' с') + ro('снос', fmt(vx() * T) + ' м') +
+    ro('скорость отн. берега', fmt(v) + ' м/с', 'vv') + ro('время t', fmt(t) + ' с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const T = Tcross();
+  if (last !== null) t = Math.min(T, t + (ts - last) / 1000 * Math.max(1, T / 8));   // переправа не дольше ~8 с экранного времени
+  last = ts; draw();
+  if (t >= T) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+function restart() { running = false; t = 0; $('play').textContent = '▶ Пуск'; params(); draw(); }
+
+$('play').onclick = () => {
+  if (t >= Tcross()) t = 0;
+  running = !running; last = null;
+  $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) requestAnimationFrame(tick);
+};
+$('reset').onclick = restart;
+$('fast').onclick = () => { $('phi').value = 0; restart(); };
+$('short').onclick = () => {
+  params();
+  // лодка быстрее течения: гасим течение; иначе — наименьший снос (v′ ⟂ v)
+  const a = u < vp ? -Math.asin(u / vp) : -(Math.PI / 2 - Math.acos(vp / u));
+  $('phi').value = Math.max(-80, a * 180 / Math.PI); restart();
+};
+$('frame').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('frame').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  frame = b.dataset.v; draw();
+});
+['vp', 'u', 'phi'].forEach(id => $(id).oninput = restart);
+window.onresize = draw;
+// ссылка вида #phi=-37&vp=5&u=3&t=10&frame=water открывает нужное состояние
+const hp = new URLSearchParams(location.hash.slice(1));
+for (const id of ['vp', 'u', 'phi']) if (hp.get(id)) $(id).value = hp.get(id);
+if (hp.get('frame')) $('frame').querySelector(`[data-v="${hp.get('frame')}"]`)?.click();
+params(); t = Math.min(Tcross(), +hp.get('t') || 0); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

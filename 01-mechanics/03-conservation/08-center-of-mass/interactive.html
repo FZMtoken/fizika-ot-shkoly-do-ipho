@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Взрыв снаряда и центр масс</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .c1 { color:#2563eb; } .c2 { color:#16a34a; } .cm { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Взрыв снаряда и центр масс</h1>
+  <p class="lead">Снаряд массой 1 кг вылетает со скоростью 30 м/с и в верхней точке разрывается на <b class="c1">синий</b> и <b class="c2">зелёный</b> осколки.
+    <b class="cm">Красный кружок</b> — центр масс осколков, пунктир — парабола, по которой летел бы снаряд без взрыва.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Угол вылета:<span id="ao"></span><input id="a" type="range" min="30" max="80" step="5" value="50"></label>
+      <label class="c1">Масса синего осколка:<span id="mo"></span><input id="m" type="range" min="0.2" max="0.8" step="0.1" value="0.4"></label>
+      <label>Относительная скорость:<span id="do"></span><input id="d" type="range" min="0" max="30" step="2" value="20"></label>
+      <label>Направление синего:<span id="fo"></span><input id="f" type="range" min="-180" max="180" step="15" value="0"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь относительную скорость 0. Отличается ли полёт от обычного?</li>
+      <li>Направление 0° (синий вперёд). Где упадут осколки? Где центр масс в момент их падения?</li>
+      <li>Направь синий осколок вниз (−90°). Он упадёт раньше. Что происходит с центром масс после этого?</li>
+      <li>Сравни энергию взрыва при массе синего 0,2 и 0,8 кг. Какой осколок уносит больше энергии?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const G = 10, V0 = 30, XL = -30, XR = 150, YT = 60;
+let t = 0, running = false, last = null;
+function P() {
+  const al = +$('a').value * Math.PI / 180, m1 = +$('m').value, m2 = 1 - m1, dv = +$('d').value, fi = +$('f').value * Math.PI / 180;
+  const vx = V0 * Math.cos(al), vy = V0 * Math.sin(al), te = vy / G, xe = vx * te, ye = vy * vy / (2 * G);
+  const d1 = [m2 * dv * Math.cos(fi), m2 * dv * Math.sin(fi)], d2 = [-m1 * dv * Math.cos(fi), -m1 * dv * Math.sin(fi)];
+  const frag = [[vx + d1[0], d1[1]], [vx + d2[0], d2[1]]].map(v => {        // время падения с высоты ye
+    const T = (v[1] + Math.sqrt(v[1] * v[1] + 2 * G * ye)) / G; return { v, T, xl: xe + v[0] * T }; });
+  const Eexp = m1 * (d1[0] ** 2 + d1[1] ** 2) / 2 + m2 * (d2[0] ** 2 + d2[1] ** 2) / 2;
+  return { al, m1, m2, dv, vx, vy, te, xe, ye, frag, Eexp, tEnd: te + Math.max(frag[0].T, frag[1].T), xNo: 2 * vx * te };
+}
+function shell(p, tt) { return [p.vx * tt, p.vy * tt - G * tt * tt / 2]; }
+function fragPos(p, i, tt) { const f = p.frag[i], s = Math.min(Math.max(tt - p.te, 0), f.T);
+  return [p.xe + f.v[0] * s, Math.max(0, p.ye + f.v[1] * s - G * s * s / 2)]; }
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), B = 28, k = Math.min((W - 16) / (XR - XL), (H - B - 10) / YT);
+  const ox = 8 + (-XL) * k + Math.max(0, (W - 16 - (XR - XL) * k) / 2), sx = x => ox + x * k, sy = y => H - B - y * k;
+  g.fillStyle = '#e7e2d6'; g.fillRect(0, H - B, W, B);
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = -20; x <= XR; x += 20) { g.fillRect(sx(x), H - B, 1, 5); g.fillText(x + ' м', sx(x), H - B + 17); }
+  // парабола без взрыва
+  g.strokeStyle = '#dc2626'; g.lineWidth = 1.5; g.setLineDash([5, 5]); g.beginPath();
+  for (let j = 0; j <= 80; j++) { const q = shell(p, 2 * p.te * j / 80); j ? g.lineTo(sx(q[0]), sy(q[1])) : g.moveTo(sx(q[0]), sy(q[1])); } g.stroke(); g.setLineDash([]);
+  const tt = Math.min(t, p.tEnd), N = 50;
+  // траектории
+  g.lineWidth = 2; g.strokeStyle = '#475569'; g.beginPath();
+  for (let j = 0; j <= N; j++) { const q = shell(p, Math.min(tt, p.te) * j / N); j ? g.lineTo(sx(q[0]), sy(q[1])) : g.moveTo(sx(q[0]), sy(q[1])); } g.stroke();
+  let q1, q2, qc;
+  if (tt > p.te) {
+    for (const [i, col] of [[0, '#2563eb'], [1, '#16a34a']]) { g.strokeStyle = col; g.beginPath();
+      for (let j = 0; j <= N; j++) { const q = fragPos(p, i, p.te + (tt - p.te) * j / N); j ? g.lineTo(sx(q[0]), sy(q[1])) : g.moveTo(sx(q[0]), sy(q[1])); } g.stroke(); }
+    q1 = fragPos(p, 0, tt); q2 = fragPos(p, 1, tt);
+    qc = [p.m1 * q1[0] + p.m2 * q2[0], p.m1 * q1[1] + p.m2 * q2[1]];
+    g.fillStyle = '#2563eb'; g.beginPath(); g.arc(sx(q1[0]), sy(q1[1]), 4 + 6 * p.m1, 0, 7); g.fill();
+    g.fillStyle = '#16a34a'; g.beginPath(); g.arc(sx(q2[0]), sy(q2[1]), 4 + 6 * p.m2, 0, 7); g.fill();
+    g.strokeStyle = '#94a3b8'; g.lineWidth = 1; g.beginPath(); g.moveTo(sx(q1[0]), sy(q1[1])); g.lineTo(sx(q2[0]), sy(q2[1])); g.stroke();
+    // вспышка в точке взрыва
+    g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(sx(p.xe), sy(p.ye), 3, 0, 7); g.fill();
+  } else {
+    qc = shell(p, tt); g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(sx(qc[0]), sy(qc[1]), 8, 0, 7); g.fill();
+  }
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2.5; g.beginPath(); g.arc(sx(qc[0]), sy(qc[1]), 6, 0, 7); g.stroke();
+  const ideal = shell(p, Math.min(tt, 2 * p.te)), landed = [0, 1].filter(i => tt >= p.te + p.frag[i].T - 1e-9).length;
+  $('ao').textContent = $('a').value + '°'; $('mo').textContent = fmt(p.m1, 1) + ' кг (зелёный ' + fmt(p.m2, 1) + ' кг)';
+  $('do').textContent = p.dv + ' м/с'; $('fo').textContent = fmt(+$('f').value, 0) + '° к горизонту';
+  const status = tt <= p.te ? 'снаряд летит' : landed === 0 ? 'на параболе' : landed === 1 ? 'сошёл с параболы' : 'оба осколка упали';
+  $('read').innerHTML = ro('время', fmt(tt, 2) + ' с') + ro('центр масс, x', fmt(qc[0]) + ' м', 'cm') + ro('центр масс, y', fmt(qc[1]) + ' м', 'cm') +
+    ro('центр масс', status) + ro('падение синего / зелёного', fmt(p.frag[0].xl, 0) + ' / ' + fmt(p.frag[1].xl, 0) + ' м') +
+    ro('без взрыва упал бы в', fmt(p.xNo, 0) + ' м') + ro('энергия взрыва', fmt(p.Eexp, 0) + ' Дж');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000) * 2;
+  last = ts; draw();
+  if (t >= P().tEnd) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= P().tEnd) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['a', 'm', 'd', 'f'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

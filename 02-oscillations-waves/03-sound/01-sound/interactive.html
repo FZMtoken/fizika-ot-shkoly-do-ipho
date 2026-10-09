@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Звук: высота и громкость</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  #hear { min-width: 11em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Звук: высота и громкость</h1>
+  <p class="lead">Сверху — частицы воздуха в звуковой волне (движение замедлено, длина волны в условном масштабе): видны сгущения и разрежения. Справа — шкала громкости в децибелах. Кнопка «Послушать» играет тон выбранной частоты; его громкость зависит от вашего устройства, а не от ползунка уровня.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Частота ν</i><span id="fo"></span><input id="f" type="range" min="0" max="100" step="1" value="45"></label>
+      <label><i>Уровень звука L</i><span id="Lo"></span><input id="L" type="range" min="0" max="130" step="5" value="60"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="hear">🔊 Послушать 1 с</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Меняй частоту от 20 Гц до 20 кГц. Как меняется длина волны? Послушай: до какой частоты ты слышишь звук?</li>
+      <li>Подними уровень на 10 дБ. Во сколько раз выросли интенсивность и амплитуда колебаний воздуха?</li>
+      <li>Найди уровень, при котором безопасное время в день меньше часа. Что из шкалы справа так громко звучит?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const V = 340, RHO = 1.29, I0 = 1e-12;
+const MARKS = [[0, 'порог'], [25, 'шёпот'], [60, 'разговор'], [80, 'улица'], [100, 'наушники'], [115, 'концерт'], [125, 'боль']];
+let t = 0, running = true, last = null, actx = null;
+
+function par() { const nu = 20 * Math.pow(1000, +$('f').value / 100), L = +$('L').value, I = I0 * Math.pow(10, L / 10);   // ν от 20 Гц до 20 кГц, логарифмически
+  return { nu, L, I, lam: V / nu, A: Math.sqrt(2 * I / (RHO * V * (2 * Math.PI * nu) ** 2)) }; }
+const fmtLen = m => m >= 1 ? fmt(m, 2) + ' м' : m >= 0.01 ? fmt(m * 100, 1) + ' см' : m >= 1e-5 ? fmt(m * 1000, 2) + ' мм' : m >= 1e-8 ? fmt(m * 1e6, 3) + ' мкм' : fmt(m * 1e9, 4) + ' нм';
+const safe = L => L <= 85 ? 'более 8 ч' : (() => { const m = 480 / Math.pow(2, (L - 85) / 3); return m >= 60 ? fmt(m / 60, 1) + ' ч' : m >= 1 ? fmt(m, 0) + ' мин' : fmt(m * 60, 0) + ' с'; })();
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), sx = W - 120, x0 = 20, aw = sx - x0 - 20;
+  const lpx = 40 + 260 * Math.log10(p.lam / 0.017) / 3, kv = 2 * Math.PI / lpx, wv = 2 * Math.PI * 0.7, amp = Math.min(lpx * 0.12, 9) * Math.min(1, 0.15 + p.L / 130);
+  // частицы воздуха
+  const rows = 9, gap = 12, top = 24;
+  g.fillStyle = '#e2e8f0'; g.fillRect(x0 - 8, top - 10, 12, rows * gap + 8);                           // мембрана-источник
+  g.fillStyle = '#475569'; g.fillRect(x0 - 8 + 4 * Math.sin(wv * t), top - 10, 6, rows * gap + 8);
+  for (let r = 0; r < rows; r++) for (let x = 6; x < aw; x += 7) {
+    const dx = amp * Math.sin(wv * t - kv * x);
+    g.fillStyle = '#2563eb'; g.beginPath(); g.arc(x0 + x + dx, top + r * gap + ((x * 7 + r * 13) % 5) - 2, 1.8, 0, 7); g.fill(); }
+  // график давления
+  const gy = top + rows * gap + 22, gh = 90, Y = s => gy + gh / 2 - s * (gh / 2 - 6) * Math.min(1, 0.15 + p.L / 130);
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.strokeRect(x0, gy, aw, gh); g.beginPath(); g.moveTo(x0, gy + gh / 2); g.lineTo(x0 + aw, gy + gh / 2); g.stroke();
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath();
+  for (let x = 0; x <= aw; x += 2) { const v = Math.cos(wv * t - kv * x); x ? g.lineTo(x0 + x, Y(v)) : g.moveTo(x0, Y(v)); } g.stroke();   // давление опережает смещение на четверть периода
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('избыточное давление: выше оси — сгущение', x0 + 4, gy + 12);
+  if (lpx < aw - 10) { const yb = gy + gh + 16, a = x0 + 10, b = a + lpx; g.strokeStyle = '#d97706'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a, yb - 5); g.lineTo(a, yb); g.lineTo(b, yb); g.lineTo(b, yb - 5); g.stroke();
+    g.fillStyle = '#d97706'; g.textAlign = 'center'; g.fillText('λ = ' + fmtLen(p.lam), (a + b) / 2, yb + 14); }
+  // шкала децибел
+  const bx = sx + 18, by = 16, bh = H - 32, Yd = L => by + bh - bh * L / 130;
+  const grd = g.createLinearGradient(0, by + bh, 0, by); grd.addColorStop(0, '#bbf7d0'); grd.addColorStop(0.6, '#fde68a'); grd.addColorStop(0.8, '#fdba74'); grd.addColorStop(1, '#fca5a5');
+  g.fillStyle = grd; g.fillRect(bx, by, 14, bh); g.strokeStyle = '#94a3b8'; g.strokeRect(bx, by, 14, bh);
+  g.textAlign = 'left'; g.font = '10px system-ui';
+  MARKS.forEach(([L, s]) => { g.fillStyle = '#475569'; g.fillRect(bx + 14, Yd(L), 5, 1); g.fillText(L + ' ' + s, bx + 22, Yd(L) + 3); });
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.moveTo(bx - 2, Yd(p.L)); g.lineTo(bx - 12, Yd(p.L) - 6); g.lineTo(bx - 12, Yd(p.L) + 6); g.fill();
+  // показания
+  $('fo').textContent = p.nu >= 1000 ? fmt(p.nu / 1000, 2) + ' кГц' : fmt(p.nu, 0) + ' Гц'; $('Lo').textContent = p.L + ' дБ';
+  $('read').innerHTML = ro('длина волны λ = v/ν', fmtLen(p.lam)) + ro('интенсивность I', p.I.toExponential(1).replace('.', ',').replace('e', '·10^') + ' Вт/м²') +
+    ro('амплитуда смещения воздуха', fmtLen(p.A)) + ro('безопасно в день', safe(p.L)) + ro('диапазон', p.nu < 20 ? 'инфразвук' : p.nu > 20000 ? 'ультразвук' : 'слышимый звук');
+}
+
+$('hear').onclick = () => {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), gn = actx.createGain(), now = actx.currentTime;
+    o.frequency.value = par().nu; gn.gain.setValueAtTime(0, now); gn.gain.linearRampToValueAtTime(0.12, now + 0.05);
+    gn.gain.setValueAtTime(0.12, now + 0.9); gn.gain.linearRampToValueAtTime(0, now + 1);        // мягкое начало и конец, без щелчков
+    o.connect(gn).connect(actx.destination); o.start(now); o.stop(now + 1.05);
+  } catch (e) { /* звук недоступен — интерактив работает и без него */ }
+};
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { $('f').value = 45; $('L').value = 60; t = 0; draw(); };
+['f', 'L'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

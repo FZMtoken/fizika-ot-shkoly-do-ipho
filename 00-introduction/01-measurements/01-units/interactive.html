@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лестница масштабов</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  canvas { width:100%; display:block; }
+  .obj { font-size:1.3rem; font-weight:700; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note { color:var(--muted); margin:2px 0 0; height:6.2em; overflow:hidden; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Лестница масштабов</h1>
+  <p class="lead">Каждый шаг шкалы — в 10 раз больше предыдущего. Двигай ползунок от протона до видимой Вселенной.</p>
+
+  <div class="card">
+    <label>Размер, порядок величины:<span id="eo"></span><input id="e" type="range" min="-15" max="27" step="0.05" value="0.23"></label>
+    <div class="row"><button id="prev">◀ Меньше</button><button id="next">Больше ▶</button></div>
+  </div>
+
+  <div class="card">
+    <p class="obj" id="name"></p>
+    <p class="note" id="note"></p>
+    <canvas id="c" height="200"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Пройди по шкале от протона до видимой Вселенной. Сколько порядков величины между ними?</li>
+      <li>Найди объект, который во столько же раз больше человека, во сколько раз человек больше атома.</li>
+      <li>Какая приставка подходит для размеров клетки? А для расстояния между городами?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const OBJ = [
+  [1.7e-15, 'Протон', 'Частица в ядре атома. Почти вся масса атома сосредоточена в ядре.'],
+  [1.1e-10, 'Атом водорода', 'Размер атома примерно в 100 000 раз больше размера его ядра.'],
+  [2e-9, 'Молекула ДНК (толщина)', 'Нить, в которой записана наследственная информация.'],
+  [1e-7, 'Вирус гриппа', 'Его можно увидеть только в электронный микроскоп.'],
+  [5e-7, 'Длина волны видимого света', 'Поэтому в обычный микроскоп нельзя разглядеть предметы меньше примерно 0,2 мкм.'],
+  [7e-6, 'Эритроцит', 'Красная клетка крови. Её уже видно в школьный микроскоп.'],
+  [7e-5, 'Толщина волоса', 'Около 70 мкм — самое маленькое, что видно глазом без приборов.'],
+  [5e-3, 'Муравей', 'Несколько миллиметров.'],
+  [1.7, 'Человек', 'Наша «единица измерения» на этой шкале.'],
+  [105, 'Монумент «Байтерек», Астана', 'Высота около 105 м.'],
+  [7010, 'Пик Хан-Тенгри (высота)', 'Около 7 км над уровнем моря.'],
+  [3e6, 'Казахстан с запада на восток', 'Около 3000 км.'],
+  [1.27e7, 'Земля (диаметр)', '12 700 км.'],
+  [3.84e8, 'Расстояние до Луны', 'Свет проходит его чуть больше чем за секунду.'],
+  [1.39e9, 'Солнце (диаметр)', 'В 109 раз больше Земли.'],
+  [1.5e11, 'Расстояние до Солнца', 'Одна астрономическая единица. Свет проходит её за 8 минут.'],
+  [9e12, 'Солнечная система (орбита Нептуна)', 'Свет пересекает её примерно за 8 часов.'],
+  [9.46e15, 'Световой год', 'Путь света за год.'],
+  [4e16, 'Ближайшая звезда — Проксима Центавра', 'Около 4,2 светового года.'],
+  [1e21, 'Галактика Млечный Путь (диаметр)', 'Около 100 000 световых лет, сотни миллиардов звёзд.'],
+  [2.4e22, 'Туманность Андромеды', 'Ближайшая большая галактика, 2,5 миллиона световых лет.'],
+  [8.8e26, 'Видимая Вселенная (диаметр)', 'Около 93 миллиардов световых лет.'],
+];
+const PFX = { '-15': 'ф', '-12': 'п', '-9': 'н', '-6': 'мк', '-3': 'м', '0': '', '3': 'к', '6': 'М', '9': 'Г', '12': 'Т', '15': 'П', '18': 'Э', '21': 'З', '24': 'И' };
+const PNAME = { '-15': 'фемто', '-12': 'пико', '-9': 'нано', '-6': 'микро', '-3': 'милли', '0': '—', '3': 'кило', '6': 'мега', '9': 'гига', '12': 'тера', '15': 'пета', '18': 'экса', '21': 'зетта', '24': 'иотта' };
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const sci = x => { const e = Math.floor(Math.log10(x)); const m = x / 10 ** e; return `${fmt(m, 2)}·10${String(e).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d])} м`; };
+const withPrefix = x => { let e = Math.floor(Math.log10(x) / 3) * 3; e = Math.max(-15, Math.min(24, e)); return fmt(x / 10 ** e, 2) + ' ' + PFX[e] + 'м'; };
+const nearest = e => OBJ.reduce((b, o, i) => Math.abs(Math.log10(o[0]) - e) < Math.abs(Math.log10(OBJ[b][0]) - e) ? i : b, 0);
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const e = +$('e').value, i = nearest(e), [size, name, note] = OBJ[i];
+  const L = 14, R = 14, y = 120, sx = v => L + (v + 15) / 42 * (W - L - R);
+  // шкала
+  g.strokeStyle = '#999'; g.lineWidth = 1; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let k = -15; k <= 27; k++) {
+    const big = k % 3 === 0; g.fillRect(sx(k) - .5, y - (big ? 7 : 4), 1, big ? 14 : 8);
+    if (big && k <= 24) g.fillText(PFX[k] + 'м', sx(k), y + 22);
+  }
+  g.fillText('10⁻¹⁵ м', sx(-15) + 16, y + 40); g.fillText('10²⁷ м', sx(27) - 16, y + 40);
+  // объекты
+  OBJ.forEach(([s], j) => { g.fillStyle = j === i ? '#dc2626' : '#2563eb'; g.beginPath(); g.arc(sx(Math.log10(s)), y, j === i ? 7 : 4, 0, 7); g.fill(); });
+  // «лупа»: круг текущего объекта и человек для сравнения
+  const ex = sx(e);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(ex, y - 16); g.lineTo(ex, 20); g.stroke();
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.moveTo(ex, y - 12); g.lineTo(ex - 6, y - 22); g.lineTo(ex + 6, y - 22); g.fill();
+  g.font = '600 13px system-ui'; g.textAlign = ex > W / 2 ? 'right' : 'left';
+  g.fillText('10^' + fmt(e, 1).replace('−', '-') + ' м', ex + (ex > W / 2 ? -8 : 8), 30);
+
+  const x = 10 ** e;
+  $('eo').textContent = `10 в степени ${fmt(e, 1)}`;
+  $('name').textContent = name; $('note').textContent = `${note} Размер: ${sci(size)}.`;
+  const k = Math.floor(Math.log10(x) / 3) * 3;
+  $('read').innerHTML = ro('размер (ползунок)', sci(x)) + ro('с приставкой', withPrefix(x)) + ro('приставка', PNAME[Math.max(-15, Math.min(24, k))] || '—') +
+    ro('во сколько раз больше человека', x >= 1.7 ? '10^' + fmt(Math.log10(x / 1.7), 1) : 'меньше в 10^' + fmt(Math.log10(1.7 / x), 1)) +
+    ro('порядков от протона', fmt(e - Math.log10(1.7e-15), 1));
+}
+const jump = d => { const i = nearest(+$('e').value), j = Math.max(0, Math.min(OBJ.length - 1, i + d)); $('e').value = Math.log10(OBJ[j][0]); draw(); };
+$('prev').onclick = () => jump(-1); $('next').onclick = () => jump(1);
+$('e').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

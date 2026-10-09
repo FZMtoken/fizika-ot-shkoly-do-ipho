@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Две тележки и пружина</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --c1:#2563eb; --c2:#16a34a; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  .t1 { color:var(--c1); } .t2 { color:var(--c2); }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .graphs { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 9em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Две тележки и пружина</h1>
+  <p class="lead">Между тележками зажата пружина. Она действует на обе тележки с равными по модулю и противоположными силами.
+    Трения нет.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label class="t1">Масса левой тележки m₁:<span id="m1o"></span><input id="m1" type="range" min="0.5" max="4" step="0.5" value="1"></label>
+      <label class="t2">Масса правой тележки m₂:<span id="m2o"></span><input id="m2" type="range" min="0.5" max="4" step="0.5" value="2"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Отпустить</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="170"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="graphs">
+    <div class="card"><canvas id="gf" height="220"></canvas></div>
+    <div class="card"><canvas id="gv" height="220"></canvas></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Сделай массы одинаковыми и отпусти пружину. Как разъезжаются тележки?</li>
+      <li>Сделай правую тележку вдвое тяжелее. Сравни графики сил, ускорения и скорости тележек.</li>
+      <li>Проверь: всегда ли произведение массы на скорость у тележек одинаково?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const K = 400, L0 = 0.3, C0 = 0.1, TMAX = 0.8;     // жёсткость, длина пружины, начальное сжатие, длительность записи
+let x1, x2, v1, v2, t, running = false, last = null, hist = [];
+const m1 = () => +$('m1').value, m2 = () => +$('m2').value;
+function init() { x1 = -(L0 - C0) / 2; x2 = (L0 - C0) / 2; v1 = 0; v2 = 0; t = 0; hist = [{ t: 0, F: K * C0, v1: 0, v2: 0 }]; }
+const force = () => Math.max(0, K * (L0 - (x2 - x1)));
+function step(h) {
+  const F = force(); v1 -= F / m1() * h; v2 += F / m2() * h; x1 += v1 * h; x2 += v2 * h; t += h;
+}
+
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+function arrow(g, x1_, y, x2_, col, lab) { const d = Math.sign(x2_ - x1_); if (Math.abs(x2_ - x1_) < 3) return;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 3; g.beginPath(); g.moveTo(x1_, y); g.lineTo(x2_ - d * 8, y); g.stroke();
+  g.beginPath(); g.moveTo(x2_, y); g.lineTo(x2_ - d * 12, y - 6); g.lineTo(x2_ - d * 12, y + 6); g.fill();
+  g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, (x1_ + x2_) / 2, y - 8); }
+
+function draw() {
+  const [g, W, H] = setup($('c')), k = W / 5.2, cx = W / 2, gy = H - 30, sx = x => cx + x * k;
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, W, H - gy);
+  const F = force(), cw = 60, chh = 34;
+  // пружина
+  const a = sx(x1), b = sx(x2), n = 10; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(a, gy - 20);
+  if (b - a < L0 * k + 1) for (let i = 1; i <= n; i++) g.lineTo(a + (b - a) * i / n, gy - 20 + (i % 2 ? -7 : 7) * (i < n ? 1 : 0));
+  g.stroke();
+  // тележки
+  for (const [x, col, side, m] of [[x1, '#2563eb', -1, m1()], [x2, '#16a34a', 1, m2()]]) {
+    const px = sx(x) + (side < 0 ? -cw : 0), w = cw * (0.7 + 0.15 * m);
+    const bx = side < 0 ? sx(x) - w : sx(x);
+    g.fillStyle = col; g.fillRect(bx, gy - 8 - chh, w, chh);
+    g.fillStyle = '#333'; for (const wx of [bx + 10, bx + w - 10]) { g.beginPath(); g.arc(wx, gy - 5, 5, 0, 7); g.fill(); }
+    g.fillStyle = '#fff'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m, 1) + ' кг', bx + w / 2, gy - 20);
+  }
+  const fs = 0.8;                                    // пикселей на 1 Н
+  arrow(g, sx(x1) - 40, 26, sx(x1) - 40 - F * fs, '#2563eb', F > 0 ? 'F = ' + fmt(F, 0) + ' Н' : '');
+  arrow(g, sx(x2) + 40, 26, sx(x2) + 40 + F * fs, '#16a34a', F > 0 ? 'F = ' + fmt(F, 0) + ' Н' : '');
+
+  const plot = (id, key, name, unit, lo, hi) => {
+    const [gg, Wg, Hg] = setup($(id)), L = 40, R = 8, Tp = 22, B = 24;
+    const px = tt => L + tt / TMAX * (Wg - L - R), py = v => Tp + (hi - v) / (hi - lo) * (Hg - Tp - B);
+    gg.strokeStyle = '#ecece6'; gg.fillStyle = '#6b6b70'; gg.font = '11px system-ui'; gg.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; gg.beginPath(); gg.moveTo(L, py(v)); gg.lineTo(Wg - R, py(v)); gg.stroke(); gg.fillText(fmt(v, 1), L - 4, py(v) + 4); }
+    gg.textAlign = 'center'; for (let tt = 0; tt <= TMAX + 1e-9; tt += 0.2) gg.fillText(fmt(tt, 1), px(tt), Hg - 8);
+    gg.strokeStyle = '#999'; gg.beginPath(); gg.moveTo(L, py(0)); gg.lineTo(Wg - R, py(0)); gg.stroke();
+    gg.fillStyle = '#1d1d1f'; gg.font = '600 13px system-ui'; gg.textAlign = 'left'; gg.fillText(`${name}, ${unit}`, L, 14);
+    for (const [sgn, col, kk] of key) { gg.strokeStyle = col; gg.lineWidth = 2.5; gg.beginPath();
+      hist.forEach((h, i) => { const v = sgn * h[kk]; i ? gg.lineTo(px(h.t), py(v)) : gg.moveTo(px(h.t), py(v)); }); gg.stroke(); }
+  };
+  const vmax = Math.max(1, Math.sqrt(K * C0 * C0 / m1()) * 1.2);
+  plot('gf', [[-1, '#2563eb', 'F'], [1, '#16a34a', 'F']], 'проекции сил', 'Н', -K * C0 * 1.2, K * C0 * 1.2);
+  plot('gv', [[1, '#2563eb', 'v1'], [1, '#16a34a', 'v2']], 'проекции скоростей', 'м/с', -vmax, vmax);
+
+  $('m1o').textContent = fmt(m1(), 1) + ' кг'; $('m2o').textContent = fmt(m2(), 1) + ' кг';
+  $('read').innerHTML = ro('сила на каждую тележку', fmt(F, 1) + ' Н') + ro('a₁ = F/m₁', fmt(F / m1()) + ' м/с²', 't1') + ro('a₂ = F/m₂', fmt(F / m2()) + ' м/с²', 't2') +
+    ro('скорость левой', fmt(Math.abs(v1)) + ' м/с', 't1') + ro('скорость правой', fmt(v2) + ' м/с', 't2') + ro('m₁v₁ и m₂v₂', `${fmt(m1() * Math.abs(v1))} и ${fmt(m2() * v2)} кг·м/с`);
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000) * 0.5; for (let i = 0; i < 40; i++) step(dt / 40); hist.push({ t, F: force(), v1, v2 }); }
+  last = ts; draw();
+  if (t >= TMAX) { running = false; $('play').textContent = '▶ Отпустить'; return; }
+  requestAnimationFrame(tick);
+}
+function reset() { running = false; init(); $('play').textContent = '▶ Отпустить'; draw(); }
+$('play').onclick = () => { if (t >= TMAX) init(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Отпустить'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['m1', 'm2'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+init(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

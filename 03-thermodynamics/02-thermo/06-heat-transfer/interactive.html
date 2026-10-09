@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тёплая стена</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  .segl { font-weight:600; margin:4px 0; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Тёплая стена</h1>
+  <p class="lead">Стена из двух слоёв: слой 1 со стороны комнаты, слой 2 со стороны улицы. Линия на рисунке — температура внутри стены. Точки, бегущие слева направо, изображают поток теплоты: чем их больше, тем больше теряет дом. Поток через оба слоя одинаковый, а тепловые сопротивления слоёв складываются.</p>
+
+  <div class="card">
+    <div class="segl">Слой 1 (внутри)</div>
+    <div class="seg" id="m1"></div>
+    <div class="segl">Слой 2 (снаружи)</div>
+    <div class="seg" id="m2"></div>
+    <div class="controls">
+      <label><i>Толщина слоя 1</i><span id="d1o"></span><input id="d1" type="range" min="1" max="60" step="1" value="51"></label>
+      <label><i>Толщина слоя 2</i><span id="d2o"></span><input id="d2" type="range" min="0" max="30" step="1" value="10"></label>
+      <label><i>Температура в комнате</i><span id="tio"></span><input id="ti" type="range" min="10" max="30" step="1" value="20"></label>
+      <label><i>Температура на улице</i><span id="teo"></span><input id="te" type="range" min="-40" max="10" step="1" value="-20"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Убери слой 2 (толщина 0). Какой поток через 1 м² стены из кирпича 51 см?</li>
+      <li>Добавь 10 см пенопласта снаружи. Во сколько раз уменьшился поток? На каком слое теперь основной перепад температуры?</li>
+      <li>Поменяй материалы слоёв местами. Изменился ли поток? А температура на границе слоёв? Почему утепляют снаружи?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const MAT = [['кирпич', 0.7, '#c2703d'], ['бетон', 1.5, '#9ca3af'], ['дерево', 0.15, '#d6a76c'], ['пенопласт', 0.04, '#e5e7eb'], ['минвата', 0.04, '#fde68a'], ['стекло', 0.8, '#bfdbfe']];
+let a = 0, b = 3, t = 0, running = true, last = null, dots = [], seed = 5, acc = 0;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+function makeSeg(id, get, set) {
+  $(id).innerHTML = MAT.map((m, i) => `<button data-i="${i}">${m[0]}</button>`).join('');
+  const upd = () => $(id).querySelectorAll('button').forEach(z => z.classList.toggle('on', +z.dataset.i === get()));
+  $(id).querySelectorAll('button').forEach(z => z.onclick = () => { set(+z.dataset.i); upd(); draw(); });
+  upd(); return upd;
+}
+function par() {
+  const d1 = +$('d1').value / 100, d2 = +$('d2').value / 100, ti = +$('ti').value, te = +$('te').value;
+  const R1 = d1 / MAT[a][1], R2 = d2 / MAT[b][1], q = (ti - te) / (R1 + R2);
+  return { d1, d2, ti, te, R1, R2, q, tb: ti - q * R1 };
+}
+function step(dt) {
+  const p = par(), rate = p.q * 0.25;                            // точек в секунду пропорционально потоку
+  acc += Math.min(80, rate) * dt;
+  while (acc >= 1) { dots.push({ x: 0, y: 0.08 + 0.84 * rnd() }); acc--; }
+  dots.forEach(d => d.x += 0.35 * dt); dots = dots.filter(d => d.x <= 1);
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 70, x1 = W - 70, y0 = 20, h = H - 50, dTot = Math.max(0.01, p.d1 + p.d2), wpx = (x1 - x0);
+  const X = d => x0 + wpx * d / dTot, Y = T => y0 + h - h * (T + 40) / 75;   // шкала от −40 до 35 °C
+  g.fillStyle = '#fee2e2'; g.fillRect(0, y0, x0, h); g.fillStyle = '#dbeafe'; g.fillRect(x1, y0, W - x1, h);
+  g.fillStyle = MAT[a][2]; g.fillRect(X(0), y0, X(p.d1) - X(0), h);
+  if (p.d2 > 0) { g.fillStyle = MAT[b][2]; g.fillRect(X(p.d1), y0, X(dTot) - X(p.d1), h); }
+  g.strokeStyle = '#475569'; g.lineWidth = 1; g.strokeRect(X(0), y0, X(dTot) - X(0), h); if (p.d2 > 0) { g.beginPath(); g.moveTo(X(p.d1), y0); g.lineTo(X(p.d1), y0 + h); g.stroke(); }
+  // поток теплоты
+  g.fillStyle = '#fff'; g.strokeStyle = '#dc2626'; g.lineWidth = 2; dots.forEach(d => { g.beginPath(); g.arc(x0 + d.x * wpx, y0 + d.y * h, 4, 0, 7); g.fill(); g.stroke(); });
+  // профиль температуры
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 3; g.beginPath(); g.moveTo(0, Y(p.ti)); g.lineTo(X(0), Y(p.ti)); g.lineTo(X(p.d1), Y(p.tb)); g.lineTo(X(dTot), Y(p.te)); g.lineTo(W, Y(p.te)); g.stroke();
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'center';
+  g.fillText('комната', x0 / 2, y0 + h + 16); g.fillText('улица', (x1 + W) / 2, y0 + h + 16);
+  g.fillText(fmt(p.ti, 0) + ' °C', x0 / 2, Y(p.ti) - 8); g.fillText(fmt(p.te, 0) + ' °C', (x1 + W) / 2, Y(p.te) - 8);
+  if (p.d2 > 0) { g.beginPath(); g.arc(X(p.d1), Y(p.tb), 4, 0, 7); g.fill(); g.fillText(fmt(p.tb, 1) + ' °C', X(p.d1), Math.max(y0 + 12, Y(p.tb) - 10)); }
+  g.fillStyle = '#334155'; g.fillText(MAT[a][0] + ' ' + Math.round(p.d1 * 100) + ' см', (X(0) + X(p.d1)) / 2, y0 + h + 16);
+  if (p.d2 > 0) g.fillText(MAT[b][0] + ' ' + Math.round(p.d2 * 100) + ' см', (X(p.d1) + X(dTot)) / 2, y0 + h + 30);
+  $('d1o').textContent = Math.round(p.d1 * 100) + ' см'; $('d2o').textContent = Math.round(p.d2 * 100) + ' см';
+  $('tio').textContent = p.ti + ' °C'; $('teo').textContent = fmt(p.te, 0) + ' °C';
+  $('read').innerHTML = ro('поток через 1 м²', fmt(p.q, 1) + ' Вт') + ro('сопротивление R₁ + R₂', fmt(p.R1 + p.R2, 2) + ' м²·К/Вт') +
+    ro('на границе слоёв', p.d2 > 0 ? fmt(p.tb, 1) + ' °C' : '—') + ro('перепад на слое 2', fmt(100 * p.R2 / (p.R1 + p.R2), 0) + ' %') + ro('дом, 200 м² стен', fmt(p.q * 200 / 1000, 2) + ' кВт');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+let u1, u2;
+$('reset').onclick = () => { a = 0; b = 3; u1(); u2(); $('d1').value = 51; $('d2').value = 10; $('ti').value = 20; $('te').value = -20; dots = []; draw(); };
+['d1', 'd2', 'ti', 'te'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+u1 = makeSeg('m1', () => a, v => a = v); u2 = makeSeg('m2', () => b, v => b = v);
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

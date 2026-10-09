@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Груз на двух нитях</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .chk { font-weight:400; display:inline-flex; gap:6px; align-items:center; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .ro b.warn { color:#dc2626; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Груз на двух нитях</h1>
+  <p class="lead">Узел с грузом висит на двух нитях. Слева — силы, действующие на узел, справа — те же силы, приставленные друг к другу: треугольник сил замыкается, потому что их сумма равна нулю. Углы нитей α₁ и α₂ отсчитываются от горизонта.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Угол левой нити α₁</i><span id="a1o"></span><input id="a1" type="range" min="3" max="87" step="1" value="30"></label>
+      <label><i>Угол правой нити α₂</i><span id="a2o"></span><input id="a2" type="range" min="3" max="87" step="1" value="60"></label>
+      <label>Масса груза m:<span id="mo"></span><input id="m" type="range" min="1" max="20" step="0.5" value="10"></label>
+    </div>
+    <div class="row"><label class="chk"><input type="checkbox" id="sym"> Симметрично (α₂ = α₁)</label><button id="perp">Нити перпендикулярны</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Включи «Симметрично» и уменьшай угол. При каком угле натяжение каждой нити равно весу груза? Что происходит при угле 5°?</li>
+      <li>Нажми «Нити перпендикулярны». Какой формы треугольник сил? Найди натяжения через синус и косинус и сверь с прибором.</li>
+      <li>Сделай нити разными. Какая из нитей натянута сильнее — крутая или пологая? Почему?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, D = Math.PI / 180;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const COL = { T1: '#2563eb', T2: '#7c3aed', mg: '#16a34a' };
+
+function forces() {
+  const a1 = +$('a1').value * D, a2 = +$('a2').value * D, m = +$('m').value, s = Math.sin(a1 + a2);
+  return { a1, a2, m, W: m * G, T1: m * G * Math.cos(a2) / s, T2: m * G * Math.cos(a1) / s };
+}
+
+function arrow(g, x1, y1, x2, y2, col, lab, side = 1) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 13px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(lab, (x1 + x2) / 2 - uy * 14 * side, (y1 + y2) / 2 + ux * 14 * side); g.textBaseline = 'alphabetic'; }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const F = forces(), sw = W * 0.58;                        // ширина сцены; справа — треугольник сил
+  // ---- сцена
+  g.save(); g.beginPath(); g.rect(0, 0, sw, H); g.clip();
+  const cy = 34, kx = sw / 2, ky = 150;
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, cy - 12, sw, 12);
+  g.strokeStyle = '#b8b2a3'; g.lineWidth = 1; for (let x = -10; x < sw; x += 12) { g.beginPath(); g.moveTo(x, cy - 12); g.lineTo(x + 10, cy - 2); g.stroke(); }
+  const h = ky - cy;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath();
+  g.moveTo(kx, ky); g.lineTo(kx - h / Math.tan(F.a1), cy); g.moveTo(kx, ky); g.lineTo(kx + h / Math.tan(F.a2), cy); g.stroke();
+  // углы с горизонтом у точек подвеса не видны при малых углах — рисуем их у узла
+  g.setLineDash([4, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1; g.beginPath(); g.moveTo(kx - 70, ky); g.lineTo(kx + 70, ky); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#6b6b70'; g.beginPath(); g.arc(kx, ky, 44, Math.PI, Math.PI + F.a1); g.stroke();
+  g.beginPath(); g.arc(kx, ky, 44, -F.a2, 0); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('α₁', kx - 58 * Math.cos(F.a1 / 2), ky - 58 * Math.sin(F.a1 / 2)); g.fillText('α₂', kx + 58 * Math.cos(F.a2 / 2), ky - 58 * Math.sin(F.a2 / 2)); g.textBaseline = 'alphabetic';
+  // груз
+  const bw = 26 + F.m * 1.6; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(kx, ky); g.lineTo(kx, ky + 22); g.stroke();
+  g.fillStyle = '#dc2626'; g.fillRect(kx - bw / 2, ky + 22, bw, bw * 0.8);
+  g.fillStyle = '#fff'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(F.m) + ' кг', kx, ky + 22 + bw * 0.45);
+  // силы на узел
+  const fs = Math.min(115 / Math.max(F.T1, F.T2, F.W), 2.4);
+  arrow(g, kx, ky, kx - F.T1 * fs * Math.cos(F.a1), ky - F.T1 * fs * Math.sin(F.a1), COL.T1, 'T₁', 1);
+  arrow(g, kx, ky, kx + F.T2 * fs * Math.cos(F.a2), ky - F.T2 * fs * Math.sin(F.a2), COL.T2, 'T₂', -1);
+  arrow(g, kx - bw / 2 - 16, ky + 22, kx - bw / 2 - 16, ky + 22 + F.W * fs, COL.mg, 'mg', 1);
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(kx, ky, 4, 0, 7); g.fill();
+  g.restore();
+  // ---- треугольник сил
+  g.strokeStyle = '#e5e5e0'; g.lineWidth = 1; g.beginPath(); g.moveTo(sw + 0.5, 10); g.lineTo(sw + 0.5, H - 10); g.stroke();
+  const P0 = [0, 0], P1 = [0, F.W], P2 = [P1[0] - F.T1 * Math.cos(F.a1), P1[1] - F.T1 * Math.sin(F.a1)];
+  const xs = [P0[0], P1[0], P2[0]], ys = [P0[1], P1[1], P2[1]];
+  const bx = W - sw - 70, by = H - 90, minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const k = Math.min(bx / Math.max(maxx - minx, 1e-6), by / Math.max(maxy - miny, 1e-6), 2.4);
+  const ox = sw + 35 + (bx - (maxx - minx) * k) / 2 - minx * k, oy = 50 + (by - (maxy - miny) * k) / 2 - miny * k;
+  const p = q => [ox + q[0] * k, oy + q[1] * k];
+  const [a, b, d] = [p(P0), p(P1), p(P2)];
+  arrow(g, a[0], a[1], b[0], b[1], COL.mg, 'mg', 1);
+  arrow(g, b[0], b[1], d[0], d[1], COL.T1, 'T₁', 1);
+  arrow(g, d[0], d[1], a[0], a[1], COL.T2, 'T₂', 1);
+  g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.textAlign = 'center'; g.fillText('треугольник сил', sw + (W - sw) / 2, 24);
+  // ---- показания
+  $('a1o').textContent = $('a1').value + '°'; $('a2o').textContent = $('a2').value + '°'; $('mo').textContent = fmt(F.m) + ' кг';
+  const big = x => x > F.W ? 'warn' : '';
+  $('read').innerHTML = ro('вес груза mg', fmt(F.W) + ' Н') + ro('натяжение T₁', fmt(F.T1) + ' Н', big(F.T1)) + ro('натяжение T₂', fmt(F.T2) + ' Н', big(F.T2)) +
+    ro('T₁ / mg', fmt(F.T1 / F.W, 2)) + ro('T₂ / mg', fmt(F.T2 / F.W, 2)) + ro('угол между нитями', (180 - +$('a1').value - +$('a2').value) + '°');
+}
+
+$('a1').oninput = () => { if ($('sym').checked) $('a2').value = $('a1').value; draw(); };
+$('a2').oninput = () => { if ($('sym').checked) $('a1').value = $('a2').value; draw(); };
+$('m').oninput = draw;
+$('sym').onchange = () => { if ($('sym').checked) $('a2').value = $('a1').value; draw(); };
+$('perp').onclick = () => { $('sym').checked = false; const a = Math.min(87, Math.max(3, +$('a1').value)); $('a1').value = a; $('a2').value = 90 - a; draw(); };
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

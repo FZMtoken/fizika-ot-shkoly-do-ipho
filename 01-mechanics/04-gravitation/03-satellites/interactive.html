@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пушка Ньютона</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .ok { color:#16a34a; } .no { color:#dc2626; } .mid { color:#b45309; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Пушка Ньютона</h1>
+  <p class="lead">Пушка стоит на «горе» высотой 300 км (выше атмосферы) и стреляет горизонтально. Меняй скорость ядра и смотри, как падение превращается в орбиту.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Скорость выстрела:<span id="vo"></span><input id="v" type="range" min="3" max="11.5" step="0.1" value="6"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="420"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Выстрели со скоростью 4, 6 и 7 км/с. Как далеко улетает ядро?</li>
+      <li>Найди скорость, при которой орбита круговая. Сравни с √(GM/r) на высоте 300 км.</li>
+      <li>Увеличь скорость до 9–10 км/с. Какой стала орбита? Где ядро движется быстрее?</li>
+      <li>При какой скорости ядро улетает навсегда? Во сколько раз она больше круговой?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const GM = 4.0e14, R = 6.37e6, H0 = 3e5, R0 = R + H0, VIEW = 4.2 * R, TMAX = 60000, K = 1500;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, running = false, last = null, path = null, key = '';
+function compute() {
+  const v0 = +$('v').value * 1000;
+  let x = 0, y = R0, vx = v0, vy = 0, tt = 0; const dt = 5, pts = [[0, x, y]];
+  const acc = (x, y) => { const r = Math.hypot(x, y), a = -GM / (r * r * r); return [a * x, a * y]; };
+  let [ax, ay] = acc(x, y), end = 'time', ang = 0, prevA = Math.atan2(y, x);
+  while (tt < TMAX) {
+    vx += ax * dt / 2; vy += ay * dt / 2; x += vx * dt; y += vy * dt; [ax, ay] = acc(x, y); vx += ax * dt / 2; vy += ay * dt / 2; tt += dt;
+    const a = Math.atan2(y, x); let d = a - prevA; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; ang += d; prevA = a;
+    if (tt % 20 === 0) pts.push([tt, x, y]);
+    const r = Math.hypot(x, y);
+    if (r < R) { end = 'hit'; pts.push([tt, x, y]); break; }
+    if (r > 3 * VIEW) { end = 'escape'; pts.push([tt, x, y]); break; }
+    if (Math.abs(ang) >= 2 * Math.PI) { end = 'orbit'; pts.push([tt, 0, R0]); break; }
+  }
+  const E = v0 * v0 / 2 - GM / R0, a = E < 0 ? -GM / (2 * E) : Infinity;
+  return { v0, pts, end, tEnd: tt, a, E, ang };
+}
+function P() { const k = $('v').value; if (k !== key) { key = k; path = compute(); } return path; }
+function posAt(p, tt) {
+  const pts = p.pts; if (tt >= pts[pts.length - 1][0]) return pts[pts.length - 1];
+  let i = 0; while (i < pts.length - 1 && pts[i + 1][0] <= tt) i++;
+  const [t0, x0, y0] = pts[i], [t1, x1, y1] = pts[i + 1], u = (tt - t0) / (t1 - t0 || 1);
+  return [tt, x0 + (x1 - x0) * u, y0 + (y1 - y0) * u];
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), apo = p.E < 0 ? Math.min(2 * p.a - R0, 12 * R) : 12 * R, bot = Math.max(apo, 1.6 * R), side = Math.max(Math.min(p.E < 0 ? p.a * 1.02 : 12 * R, 12 * R), 1.6 * R);
+  const k = Math.min((W - 20) / (2 * side), (H - 24) / (R0 + bot)), cx = W / 2, cy = 12 + R0 * k;
+  const sx = x => cx + x * k, sy = y => cy - y * k;
+  g.fillStyle = '#0f172a'; g.fillRect(0, 0, W, H);
+  // Земля и гора
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(cx, cy, R * k, 0, 7); g.fill();
+  g.fillStyle = '#16a34a'; g.beginPath(); g.arc(cx, cy, R * k, -Math.PI * 0.62, -Math.PI * 0.38); g.lineTo(cx, cy); g.fill();
+  g.fillStyle = '#a3a3a3'; g.beginPath(); g.moveTo(sx(-4e5), sy(R - 2e4)); g.lineTo(sx(0), sy(R0)); g.lineTo(sx(4e5), sy(R - 2e4)); g.fill();
+  // круговая орбита на высоте пушки — пунктир
+  g.strokeStyle = '#475569'; g.setLineDash([4, 5]); g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R0 * k, 0, 7); g.stroke(); g.setLineDash([]);
+  // траектория до текущего момента
+  const tt = Math.min(t, p.tEnd); g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.beginPath();
+  let first = true; for (const q of p.pts) { if (q[0] > tt) break; first ? g.moveTo(sx(q[1]), sy(q[2])) : g.lineTo(sx(q[1]), sy(q[2])); first = false; }
+  const cur = posAt(p, tt); g.lineTo(sx(cur[1]), sy(cur[2])); g.stroke();
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(sx(cur[1]), sy(cur[2]), 4, 0, 7); g.fill();
+  g.fillStyle = '#cbd5e1'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('пунктир — круговая орбита на высоте 300 км', 10, 18);
+  const vc = Math.sqrt(GM / R0), ve = Math.sqrt(2 * GM / R0);
+  let type, cls;
+  if (p.E >= 0) { type = 'улетает навсегда'; cls = 'no'; }
+  else if (R0 * 2 - p.a * 2 > 0 && 2 * p.a - R0 < R) { type = 'падает на Землю'; cls = 'mid'; }
+  else if (Math.abs(p.v0 - vc) < 60) { type = 'круговая'; cls = 'ok'; }
+  else { type = 'эллипс'; cls = 'ok'; }
+  const Tper = p.E < 0 ? 2 * Math.PI * Math.sqrt(p.a ** 3 / GM) / 60 : NaN, far = p.E < 0 ? (2 * p.a - R0 - R) / 1000 : Infinity;
+  $('vo').textContent = fmt(p.v0 / 1000, 1) + ' км/с';
+  $('read').innerHTML = ro('траектория', type, cls) + ro('круговая скорость здесь', fmt(vc / 1000) + ' км/с') + ro('скорость убегания здесь', fmt(ve / 1000) + ' км/с') +
+    ro('период орбиты', isFinite(Tper) && type !== 'падает на Землю' ? fmt(Tper, 0) + ' мин' : '—') +
+    ro('наибольшая высота', isFinite(far) ? fmt(Math.max(far, 300), 0) + ' км' : '∞') + ro('время полёта', fmt(tt / 60, 0) + ' мин');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000) * K;
+  last = ts; draw();
+  if (t >= P().tEnd) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= P().tEnd) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('v').oninput = reset;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Изопроцессы на трёх графиках</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Изопроцессы на трёх графиках</h1>
+  <p class="lead">1 моль идеального газа. Выбери процесс и меняй параметр — точка движется сразу на трёх графиках: p(V), V(T) и p(T). Линия — весь процесс, серые линии — тот же процесс при другом значении постоянного параметра. «Пуск» проводит процесс туда и обратно автоматически.</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="T" class="on">Изотерма (T = const)</button><button data-k="p">Изобара (p = const)</button><button data-k="V">Изохора (V = const)</button></div>
+    <div class="controls">
+      <label><i id="al"></i><span id="ao"></span><input id="a" type="range" min="0" max="100" step="1" value="40"></label>
+      <label><i id="bl"></i><span id="bo"></span><input id="b" type="range" min="0" max="100" step="1" value="40"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Выбери изотерму и сжимай газ. Какая линия получилась на графике p(V)? А на V(T) и p(T)?</li>
+      <li>Выбери изобару и меняй давление. Какие изобары на графике V(T) круче — при большом или малом давлении?</li>
+      <li>Продолжи мысленно изохору на графике p(T) влево. В какой точке она пересечёт ось температур?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31, VMAX = 50, TMAX = 600, PMAX = 1000;     // оси: V до 50 л, T до 600 К, p до 1000 кПа
+const RANGE = { V: [5, 50], T: [100, 600], p: [50, 500] };
+const NAME = { V: 'Объём V', T: 'Температура T', p: 'Давление p' }, UNIT = { V: ' л', T: ' К', p: ' кПа' };
+let kind = 'T', t = 0, running = false, last = null;
+
+const varOf = k => k === 'T' ? 'V' : 'T';                      // что меняем в процессе
+const val = (q, s) => RANGE[q][0] + (RANGE[q][1] - RANGE[q][0]) * s / 100;
+function state(k, cst, x) {                                     // cst — значение постоянного параметра, x — изменяемого
+  if (k === 'T') return { T: cst, V: x, p: R * cst / (x * 1e-3) / 1000 };
+  if (k === 'p') return { p: cst, T: x, V: R * x / (cst * 1000) * 1e3 };
+  return { V: cst, T: x, p: R * x / (cst * 1e-3) / 1000 };
+}
+function cur() { const q = varOf(kind), s = running ? 50 + 50 * Math.sin(t * 0.8) : +$('a').value;
+  return { cst: val(kind, +$('b').value), x: val(q, s), q }; }
+
+function plot(g, x0, y0, w, h, fx, fy, xmax, ymax, xl, yl, k, cst, pt) {
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText(yl, x0 + 4, y0 + 10); g.textAlign = 'right'; g.fillText(xl, x0 + w, y0 + h + 14);
+  const X = v => x0 + w * v / xmax, Y = v => y0 + h - h * v / ymax;
+  g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  const q = varOf(k), [lo, hi] = RANGE[q];
+  const curve = (c, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath();
+    for (let j = 0; j <= 120; j++) { const s = state(k, c, lo + (hi - lo) * j / 120); j ? g.lineTo(X(fx(s)), Y(fy(s))) : g.moveTo(X(fx(s)), Y(fy(s))); } g.stroke(); };
+  [0.5, 2].forEach(m => curve(cst * m, '#cbd5e1', 1)); curve(cst, '#2563eb', 2.5);
+  g.restore();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(fx(pt)), Y(fy(pt)), 5, 0, 7); g.fill();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const { cst, x, q } = cur(), s = state(kind, cst, x), gap = 18, pw = (W - 40 - 2 * gap) / 3, ph = H - 50;
+  plot(g, 30, 16, pw, ph, a => a.V, a => a.p, VMAX, PMAX, 'V, л', 'p, кПа', kind, cst, s);
+  plot(g, 30 + pw + gap, 16, pw, ph, a => a.T, a => a.V, TMAX, VMAX, 'T, К', 'V, л', kind, cst, s);
+  plot(g, 30 + 2 * (pw + gap), 16, pw, ph, a => a.T, a => a.p, TMAX, PMAX, 'T, К', 'p, кПа', kind, cst, s);
+  $('al').textContent = NAME[q] + ' — меняем'; $('ao').textContent = fmt(x, 0) + UNIT[q];
+  $('bl').textContent = NAME[kind] + ' — постоянно'; $('bo').textContent = fmt(cst, 0) + UNIT[kind];
+  $('read').innerHTML = ro('давление p', fmt(s.p, 0) + ' кПа') + ro('объём V', fmt(s.V, 1) + ' л') + ro('температура T', fmt(s.T, 0) + ' К') +
+    ro('pV/T', fmt(s.p * 1000 * s.V * 1e-3 / s.T, 2) + ' Дж/К') + ro('проверка: νR', '8,31 Дж/К');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); else { $('a').value = Math.round(50 + 50 * Math.sin(t * 0.8)); draw(); } };
+$('reset').onclick = () => { $('a').value = 40; $('b').value = 40; t = 0; draw(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; draw(); });
+['a', 'b'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

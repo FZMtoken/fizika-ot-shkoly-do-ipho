@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Игра «Оцени!»</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button:disabled { opacity:.4; cursor:default; }
+  canvas { width:100%; display:block; }
+  .q { font-size:1.15rem; font-weight:700; margin:0; height:3.1em; overflow:hidden; }
+  .qn { color:var(--muted); font-size:13px; margin:0; }
+  .result { height:3em; overflow:hidden; margin:6px 0 0; }
+  .ok { color:#16a34a; } .mid { color:#b45309; } .no { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #check, #nextq { min-width: 9em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Игра «Оцени!»</h1>
+  <p class="lead">Поставь оценку на логарифмической шкале и проверь. В пределах 3 раз — 3 очка, в пределах 10 раз — 1 очко.</p>
+
+  <div class="card">
+    <p class="qn" id="qn"></p>
+    <p class="q" id="q"></p>
+    <label>Твоя оценка:<span id="go"></span><input id="g" type="range" step="0.02"></label>
+    <div class="row">
+      <button class="primary" id="check">Проверить</button>
+      <button id="nextq">Следующий вопрос</button>
+      <button id="restart">Начать заново</button>
+    </div>
+    <p class="result" id="res"></p>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="120"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Советы:</b>
+    <ol>
+      <li>Разбей величину на множители, которые легко прикинуть.</li>
+      <li>Округляй до одной значащей цифры и считай в степенях десяти.</li>
+      <li>Не знаешь между 10 и 1000 — бери среднее геометрическое, 100.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+// [вопрос, эталон, единица, минимальный и максимальный порядок шкалы, пояснение]
+const Q = [
+  ['Сколько весит слон?', 5e3, 'кг', 0, 6, 'Африканский слон — 4–6 тонн.'],
+  ['Какова высота Эвереста?', 8849, 'м', 1, 7, 'Высочайшая вершина мира — 8849 м.'],
+  ['Сколько людей живёт в Казахстане?', 2.0e7, 'чел.', 4, 10, 'Около 20 миллионов человек.'],
+  ['Какова толщина листа бумаги?', 1e-4, 'м', -8, -1, 'Около 0,1 мм: пачка из 500 листов толщиной 5 см.'],
+  ['Сколько весит муравей?', 3e-6, 'кг', -9, -2, 'Несколько миллиграммов.'],
+  ['Сколько людей живёт на Земле?', 8.1e9, 'чел.', 6, 12, 'Около 8 миллиардов.'],
+  ['Сколько весит воздух в комнате 5 × 4 × 3 м?', 72, 'кг', -1, 5, '60 м³ × 1,2 кг/м³ ≈ 72 кг.'],
+  ['Сколько клеток в теле человека?', 3e13, 'шт.', 6, 18, 'Около 30 триллионов.'],
+  ['Какова скорость света?', 3e8, 'м/с', 3, 12, '300 000 км/с.'],
+  ['Сколько звёзд в нашей Галактике?', 2e11, 'шт.', 6, 15, 'От 100 до 400 миллиардов.'],
+  ['Сколько весит Земля?', 6e24, 'кг', 18, 30, '6·10²⁴ кг.'],
+  ['Какой возраст Вселенной в секундах?', 4.35e17, 'с', 12, 22, '13,8 миллиарда лет × 3·10⁷ с/год ≈ 4·10¹⁷ с.'],
+];
+let i = 0, score = 0, done = 0, checked = false;
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const sci = x => { const e = Math.floor(Math.log10(x) + 1e-9), m = x / 10 ** e; return `${fmt(m, 1)}·10${String(e).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d])}`; };
+
+function load() {
+  const [q, , u, lo, hi] = Q[i];
+  $('qn').textContent = `Вопрос ${i + 1} из ${Q.length}`; $('q').textContent = q;
+  Object.assign($('g'), { min: lo, max: hi }); $('g').value = (lo + hi) / 2;
+  checked = false; $('check').disabled = false; $('res').innerHTML = '&nbsp;'; draw();
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const [, val, u, lo, hi] = Q[i], e = +$('g').value, L = 20, R = 20, y = 64;
+  const sx = v => L + (v - lo) / (hi - lo) * (W - L - R);
+  if (checked) { // зоны «в 3 раза» и «в 10 раз»
+    const t = Math.log10(val);
+    g.fillStyle = 'rgba(180,83,9,.12)'; g.fillRect(sx(t - 1), y - 18, sx(t + 1) - sx(t - 1), 36);
+    g.fillStyle = 'rgba(22,163,74,.2)'; g.fillRect(sx(t - Math.log10(3)), y - 18, sx(t + Math.log10(3)) - sx(t - Math.log10(3)), 36);
+  }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  const step = hi - lo > 8 ? 2 : 1;
+  for (let k = lo; k <= hi; k++) { g.fillRect(sx(k) - .5, y - 5, 1, 10); if ((k - lo) % step === 0) g.fillText('10' + String(k).replace('-', '⁻').replace(/\d/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]), sx(k), y + 24); }
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(sx(e), y, 8, 0, 7); g.fill();
+  g.font = '600 12px system-ui'; g.fillText('ты', sx(e), y - 14);
+  if (checked) { const t = Math.log10(val); g.fillStyle = '#16a34a'; g.beginPath(); g.moveTo(sx(t), y + 2); g.lineTo(sx(t) - 7, y + 14); g.lineTo(sx(t) + 7, y + 14); g.fill(); g.fillText('ответ', sx(t), y + 44); }
+  $('go').textContent = `${sci(10 ** e)} ${u}`;
+  $('read').innerHTML = ro('очки', `${score} из ${3 * Q.length}`) + ro('отвечено', `${done} из ${Q.length}`) +
+    ro('твоя оценка', `${sci(10 ** e)} ${u}`) + ro('эталон', checked ? `${sci(val)} ${u}` : 'скрыт');
+}
+
+$('check').onclick = () => {
+  if (checked) return;
+  const [, val, u, , , note] = Q[i], x = 10 ** +$('g').value, f = Math.max(x / val, val / x);
+  const pts = f <= 3 ? 3 : f <= 10 ? 1 : 0; score += pts; done++; checked = true; $('check').disabled = true;
+  $('res').innerHTML = `<b class="${pts === 3 ? 'ok' : pts ? 'mid' : 'no'}">${pts === 3 ? 'Отлично!' : pts ? 'Неплохо.' : 'Мимо.'}</b> ` +
+    `Ошибка в ${fmt(f, 1)} раза, +${pts}. ${note}`;
+  draw();
+};
+$('nextq').onclick = () => { i = (i + 1) % Q.length; load(); };
+$('restart').onclick = () => { i = 0; score = 0; done = 0; load(); };
+$('g').oninput = () => { if (!checked) draw(); else { draw(); } };
+window.onresize = draw;
+load();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

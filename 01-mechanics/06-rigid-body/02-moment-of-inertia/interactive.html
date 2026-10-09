@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стержень с грузами</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Стержень с грузами</h1>
+  <p class="lead">Вид сверху: однородный стержень длиной 1 м вращается в горизонтальной плоскости вокруг вертикальной оси (чёрная точка). На стержне симметрично от его середины закреплены два одинаковых груза.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Масса стержня m₀</i><span id="m0o"></span><input id="m0" type="range" min="0" max="2" step="0.1" value="1"></label>
+      <label><i>Масса каждого груза m</i><span id="mo"></span><input id="m" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+      <label><i>Грузы от середины стержня r</i><span id="ro"></span><input id="r" type="range" min="0" max="0.5" step="0.05" value="0.25"></label>
+      <label><i>Ось от середины стержня d</i><span id="do"></span><input id="d" type="range" min="0" max="0.5" step="0.05" value="0"></label>
+      <label><i>Угловая скорость ω</i><span id="wo"></span><input id="w" type="range" min="0.5" max="6" step="0.5" value="2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь грузы на 0,2 м от середины, потом на 0,4 м. Во сколько раз вырос их вклад в момент инерции?</li>
+      <li>Убери грузы (m = 0) и сдвигай ось. Сравни момент инерции стержня с теоремой Штейнера: I = m₀L²/12 + m₀d².</li>
+      <li>При одной угловой скорости сравни энергию вращения, когда грузы у середины и на концах.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 3) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['m0', 'm', 'r', 'd', 'w'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+const L = 1;
+let phi = 0, running = true, last = null;
+
+function calc() {
+  const v = Object.fromEntries(IDS.map(id => [id, +$(id).value]));
+  const Irc = v.m0 * L * L / 12, Ird = v.m0 * v.d * v.d, Ib = v.m * ((v.r - v.d) ** 2 + (v.r + v.d) ** 2);
+  const I = Irc + Ird + Ib; return { ...v, Irc, Ird, Ib, I, E: I * v.w * v.w / 2 };
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = calc(), sw = Math.min(W * 0.6, 460), k = Math.min(sw, H) / 2 / (L / 2 + 0.5) * 0.92, cx = sw / 2, cy = H / 2;
+  // траектории концов и грузов
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1;
+  [L / 2 + S.d, L / 2 - S.d, S.r + S.d, Math.abs(S.r - S.d)].forEach(q => { g.beginPath(); g.arc(cx, cy, q * k, 0, 7); g.stroke(); });
+  // стержень: середина стержня на расстоянии d от оси
+  const ux = Math.cos(phi), uy = -Math.sin(phi), P = s => [cx + (s - S.d) * k * ux, cy + (s - S.d) * k * uy];   // s — координата вдоль стержня от середины
+  const [ax, ay] = P(-L / 2), [bx, by] = P(L / 2);
+  g.strokeStyle = S.m0 > 0 ? '#8b6f3a' : '#d6c9a8'; g.lineWidth = 6 + S.m0 * 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); g.lineCap = 'butt';
+  const [mx, my] = P(0); g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(mx - 6 * uy, my + 6 * ux); g.lineTo(mx + 6 * uy, my - 6 * ux); g.stroke();
+  if (S.m > 0) [-S.r, S.r].forEach(s => { const [x, y] = P(s); g.fillStyle = '#dc2626'; g.beginPath(); g.arc(x, y, 6 + S.m * 10, 0, 7); g.fill(); });
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fill();
+  // столбики вкладов
+  const bx0 = sw + 30, bw = W - bx0 - 20, Imax = 1.7;                  // наибольший возможный момент инерции ≈ 1,67 кг·м²
+  if (bw > 60) {
+    const bar = (y, lab, val, col) => { g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.textAlign = 'left'; g.fillText(lab, bx0, y - 6);
+      g.fillStyle = '#f1f1ec'; g.fillRect(bx0, y, bw, 18); g.fillStyle = col; g.fillRect(bx0, y, bw * Math.min(1, val / Imax), 18);
+      g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText(fmt(val) + ' кг·м²', bx0 + 6, y + 13); };
+    g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillText('Вклады в момент инерции', bx0, 30);
+    bar(66, 'стержень: m₀L²/12', S.Irc, '#d6c9a8'); bar(114, 'стержень: сдвиг оси m₀d²', S.Ird, '#c8a96a');
+    bar(162, 'грузы: m(r−d)² + m(r+d)²', S.Ib, '#fca5a5'); bar(222, 'всего I', S.I, '#93c5fd');
+  }
+  $('m0o').textContent = fmt(S.m0, 1) + ' кг'; $('mo').textContent = fmt(S.m, 2) + ' кг'; $('ro').textContent = fmt(S.r, 2) + ' м';
+  $('do').textContent = fmt(S.d, 2) + ' м'; $('wo').textContent = fmt(S.w, 1) + ' рад/с';
+  $('read').innerHTML = ro('момент инерции I', fmt(S.I) + ' кг·м²') + ro('энергия Iω²/2', fmt(S.E) + ' Дж') +
+    ro('стержень (Штейнер)', fmt(S.Irc + S.Ird) + ' кг·м²') + ro('грузы', fmt(S.Ib) + ' кг·м²') + ro('скорость конца', fmt(S.w * (L / 2 + S.d), 2) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) { last = null; return; }
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  phi += +$('w').value * dt * 0.5;                                   // на экране вдвое медленнее
+  draw(); requestAnimationFrame(tick);
+}
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); phi = 0; draw(); };
+IDS.forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

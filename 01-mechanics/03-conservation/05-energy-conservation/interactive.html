@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Американские горки без трения</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .ek { color:#2563eb; } .ep { color:#16a34a; } .et { color:#1d1d1f; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Американские горки без трения</h1>
+  <p class="lead">Вагончик стартует из покоя с выбранной высоты на первом спуске. Столбики справа: <b class="ek">кинетическая</b>,
+    <b class="ep">потенциальная</b> и <b class="et">полная</b> энергия. Пунктир — уровень стартовой высоты.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Стартовая высота h₀:<span id="ho"></span><input id="h" type="range" min="5" max="40" step="1" value="30"></label>
+      <label>Масса вагончика m:<span id="mo"></span><input id="m" type="range" min="200" max="1000" step="50" value="500"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Запусти вагончик с 30 м. Сравни скорость на вершинах горок с формулой v = √(2g(h₀ − h)).</li>
+      <li>Следи за столбиками. Как меняются кинетическая и потенциальная энергии? А их сумма?</li>
+      <li>Поставь старт ниже вершины 30 м. Что сделает вагончик перед ней? Где он развернётся?</li>
+      <li>Измени массу. Меняются ли скорости? А энергии?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+// профиль трассы: узлы (x, y), между ними — косинусная сглаживающая кривая
+const NODES = [[0, 40], [40, 0], [70, 25], [95, 0], [115, 15], [135, 5], [162, 30], [188, 0], [215, 0]], XMAX = 215, YMAX = 44;
+function seg(x) { for (let i = 0; i < NODES.length - 1; i++) if (x <= NODES[i + 1][0]) return i; return NODES.length - 2; }
+function y(x) { x = Math.max(0, Math.min(XMAX, x)); const i = seg(x), [x0, y0] = NODES[i], [x1, y1] = NODES[i + 1], u = (x - x0) / (x1 - x0);
+  return y0 + (y1 - y0) * (1 - Math.cos(Math.PI * u)) / 2; }
+function dy(x) { x = Math.max(0, Math.min(XMAX, x)); const i = seg(x), [x0, y0] = NODES[i], [x1, y1] = NODES[i + 1], u = (x - x0) / (x1 - x0);
+  return (y1 - y0) * Math.PI * Math.sin(Math.PI * u) / 2 / (x1 - x0); }
+function startX(h) { let a = 0, b = 40; for (let k = 0; k < 50; k++) { const mid = (a + b) / 2; if (y(mid) > h) a = mid; else b = mid; } return (a + b) / 2; }
+
+let x, dir, running = false, last = null, vmax;
+const P = () => ({ h0: +$('h').value, m: +$('m').value });
+function init() { x = startX(P().h0); dir = 1; vmax = 0; }
+function speed(xx) { return Math.sqrt(Math.max(0, 2 * G * (P().h0 - y(xx)))); }
+function step(h) {
+  const v = Math.max(speed(x), 0.3), nx = x + dir * v * h / Math.sqrt(1 + dy(x) ** 2);
+  if (y(nx) > P().h0) { dir = -dir; return; }         // не хватает энергии — поворот назад
+  x = Math.max(0, nx);
+  vmax = Math.max(vmax, speed(x));
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), barW = Math.min(150, W * 0.28), TW = W - barW - 20, L = 34, B = 26, Tp = 14;
+  const sx = xx => L + xx / XMAX * (TW - L), sy = yy => H - B - yy / YMAX * (H - B - Tp);
+  // сетка высот
+  g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let v = 0; v <= 40; v += 10) { g.strokeStyle = '#ecece6'; g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(TW, sy(v)); g.stroke(); g.fillStyle = '#6b6b70'; g.fillText(v + ' м', L - 4, sy(v) + 4); }
+  // трасса
+  g.fillStyle = '#eef2f7'; g.beginPath(); g.moveTo(sx(0), sy(0));
+  for (let xx = 0; xx <= XMAX; xx += 0.5) g.lineTo(sx(xx), sy(y(xx))); g.lineTo(sx(XMAX), sy(0)); g.fill();
+  g.strokeStyle = '#475569'; g.lineWidth = 3; g.beginPath();
+  for (let xx = 0; xx <= XMAX; xx += 0.5) xx ? g.lineTo(sx(xx), sy(y(xx))) : g.moveTo(sx(xx), sy(y(xx))); g.stroke();
+  // уровень энергии
+  g.strokeStyle = '#dc2626'; g.lineWidth = 1.5; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(L, sy(p.h0)); g.lineTo(TW, sy(p.h0)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#dc2626'; g.textAlign = 'right'; g.fillText('h₀ = ' + p.h0 + ' м', TW, sy(p.h0) - 5);
+  // вершины: подписи скорости
+  g.textAlign = 'center';
+  let blocked = false;                                   // вершины: только локальные максимумы
+  NODES.forEach(([nx, ny], i) => { if (i === 0 || i === NODES.length - 1 || ny <= NODES[i - 1][1] || ny <= NODES[i + 1][1]) return;
+    blocked = blocked || ny > p.h0;
+    const txt = blocked ? 'не доедет' : 'v = ' + fmt(Math.sqrt(2 * G * (p.h0 - ny))) + ' м/с';
+    g.fillStyle = blocked ? '#dc2626' : '#6b6b70'; g.fillText(txt, sx(nx), sy(ny) - 10); });
+  // вагончик
+  const cx = sx(x), cy = sy(y(x)), ang = Math.atan2(-dy(x) * (H - B - Tp) / YMAX, (TW - L) / XMAX);
+  g.save(); g.translate(cx, cy); g.rotate(ang); g.fillStyle = '#2563eb'; g.fillRect(-12, -16, 24, 12);
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(-7, -3, 3.5, 0, 7); g.arc(7, -3, 3.5, 0, 7); g.fill(); g.restore();
+  // столбики энергии
+  const Ep = p.m * G * y(x), Ek = Math.max(0, p.m * G * p.h0 - Ep), E = p.m * G * p.h0, EM = 1000 * G * 40;
+  const bx = TW + 20, bw = (barW - 20) / 3, base = H - B, bh = H - B - Tp - 16, sc = e => e / EM * bh;
+  [[Ek, '#2563eb', 'Eк'], [Ep, '#16a34a', 'Eп'], [E, '#1d1d1f', 'E']].forEach(([e, col, lab], i) => {
+    g.fillStyle = col; g.fillRect(bx + i * (bw + 6), base - sc(e), bw, sc(e));
+    g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, bx + i * (bw + 6) + bw / 2, base + 16); });
+  g.strokeStyle = '#999'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx - 4, base); g.lineTo(W - 4, base); g.stroke();
+  const v = speed(x);
+  $('ho').textContent = p.h0 + ' м'; $('mo').textContent = p.m + ' кг';
+  $('read').innerHTML = ro('высота', fmt(y(x)) + ' м') + ro('скорость', fmt(v) + ' м/с') + ro('кинетическая Eк', fmt(Ek / 1000) + ' кДж', 'ek') +
+    ro('потенциальная Eп', fmt(Ep / 1000) + ' кДж', 'ep') + ro('полная E', fmt(E / 1000) + ' кДж', 'et') + ro('наибольшая скорость', fmt(vmax) + ' м/с');
+}
+function done() { return x >= XMAX; }
+function tick(ts) { if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000) * 3; for (let i = 0; i < 40; i++) step(dt / 40); }
+  last = ts; draw();
+  if (done()) { x = XMAX; running = false; $('play').textContent = '▶ Пуск'; draw(); return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; init(); $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (done()) init(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['h', 'm'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+init(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

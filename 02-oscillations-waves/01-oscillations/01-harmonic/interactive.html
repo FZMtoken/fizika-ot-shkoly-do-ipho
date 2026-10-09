@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Колебание как тень движения по кругу</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Колебание как тень движения по кругу</h1>
+  <p class="lead">Точка равномерно бежит по окружности радиусом A, её проекция на горизонтальную ось колеблется: x = A cos(ωt + φ₀). Справа графики координаты, скорости и ускорения проекции; у каждого свой масштаб.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Амплитуда A</i><span id="Ao"></span><input id="A" type="range" min="1" max="5" step="0.5" value="4"></label>
+      <label><i>Период T</i><span id="To"></span><input id="T" type="range" min="0.5" max="4" step="0.1" value="2"></label>
+      <label><i>Начальная фаза φ₀</i><span id="fo"></span><input id="f" type="range" min="0" max="24" step="1" value="0"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Следи за точкой на круге и её проекцией. Где проекция движется быстрее всего? Где останавливается? Где ускорение наибольшее?</li>
+      <li>Уменьши период вдвое. Во сколько раз изменились наибольшая скорость и наибольшее ускорение?</li>
+      <li>Меняй начальную фазу. Как сдвигается график? На какую часть периода он сдвигается при φ₀ = π/2?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['A', 'T', 'f'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+const WIN = 4;                                                    // окно графиков, с
+let t = 0, running = true, last = null;
+
+function par() { const A = +$('A').value, T = +$('T').value, f = +$('f').value * Math.PI / 12, w = 2 * Math.PI / T; return { A, T, f, w }; }
+const X = (p, q) => p.A * Math.cos(p.w * q + p.f), V = (p, q) => -p.A * p.w * Math.sin(p.w * q + p.f), Acc = (p, q) => -p.A * p.w * p.w * Math.cos(p.w * q + p.f);
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), sw = Math.min(W * 0.4, 300), R = Math.min(sw / 2 - 20, 120) * p.A / 5, cx = sw / 2, cy = 150;
+  const ph = p.w * t + p.f, px = cx + R * Math.cos(ph), py = cy - R * Math.sin(ph);
+  // круг, радиус, проекция
+  g.strokeStyle = '#d1d5db'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - sw / 2 + 10, 300); g.lineTo(cx + sw / 2 - 10, 300); g.stroke();
+  g.strokeStyle = '#9ca3af'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(px, py); g.stroke();
+  g.setLineDash([4, 4]); g.beginPath(); g.moveTo(px, py); g.lineTo(px, 300); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(px, py, 6, 0, 7); g.fill();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(px, 300, 8, 0, 7); g.fill();
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center';
+  g.fillText('−A', cx - R, 318); g.fillText('0', cx, 318); g.fillText('A', cx + R, 318);
+  g.beginPath(); g.moveTo(cx - R, 296); g.lineTo(cx - R, 304); g.moveTo(cx + R, 296); g.lineTo(cx + R, 304); g.moveTo(cx, 296); g.lineTo(cx, 304); g.stroke();
+  // стрелки скорости и ускорения проекции
+  const arr = (x0, y0, dx, col, lab) => { if (Math.abs(dx) < 2) return; g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + dx, y0); g.stroke();
+    const s = Math.sign(dx); g.beginPath(); g.moveTo(x0 + dx, y0); g.lineTo(x0 + dx - 9 * s, y0 - 5); g.lineTo(x0 + dx - 9 * s, y0 + 5); g.fill(); g.font = '600 12px system-ui'; g.fillText(lab, x0 + dx + 10 * s, y0 + 4); };
+  arr(px, 278, V(p, t) / (p.A * p.w) * 50, '#16a34a', 'v'); arr(px, 338, Acc(p, t) / (p.A * p.w * p.w) * 50, '#d97706', 'a');
+  // графики
+  const gx = sw + 30, gw = W - gx - 16;
+  if (gw > 80) {
+    const rows = [['x', X, p.A, '#dc2626', 'см'], ['v', V, p.A * p.w, '#16a34a', 'см/с'], ['a', Acc, p.A * p.w * p.w, '#d97706', 'см/с²']], rh = (H - 30) / 3;
+    rows.forEach(([lab, fn, mx, col, un], i) => {
+      const y0 = 15 + i * rh + rh / 2, k = (rh / 2 - 12) / mx;
+      g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, y0); g.lineTo(gx + gw, y0); g.stroke();
+      g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+      for (let j = 0; j <= 300; j++) { const q = WIN * j / 300, yy = y0 - fn(p, q) * k; j ? g.lineTo(gx + gw * j / 300, yy) : g.moveTo(gx, yy); } g.stroke();
+      const tm = t % WIN; g.fillStyle = col; g.beginPath(); g.arc(gx + gw * tm / WIN, y0 - fn(p, tm) * k, 4, 0, 7); g.fill();
+      g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(lab, gx + 4, y0 - rh / 2 + 16);
+      g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right'; g.fillText('±' + fmt(mx, 1) + ' ' + un, gx + gw, y0 - rh / 2 + 16);
+    });
+    g.fillStyle = '#6b6b70'; g.textAlign = 'right'; g.fillText('t: 0 … ' + WIN + ' с', gx + gw, H - 4);
+  }
+  $('Ao').textContent = fmt(p.A, 1) + ' см'; $('To').textContent = fmt(p.T, 1) + ' с'; $('fo').textContent = $('f').value + 'π/12 рад (' + (+$('f').value * 15) + '°)';
+  $('read').innerHTML = ro('частота ν', fmt(1 / p.T) + ' Гц') + ro('циклическая ω', fmt(p.w) + ' рад/с') + ro('координата x', fmt(X(p, t), 1) + ' см') +
+    ro('скорость v', fmt(V(p, t), 1) + ' см/с') + ro('ускорение a', fmt(Acc(p, t), 1) + ' см/с²') + ro('v max = Aω', fmt(p.A * p.w, 1) + ' см/с') + ro('a max = Aω²', fmt(p.A * p.w * p.w, 1) + ' см/с²');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); t = 0; draw(); };
+IDS.forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

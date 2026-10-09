@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Опыт Торричелли в горах</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 12px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Опыт Торричелли в горах</h1>
+  <p class="lead">Трубка с пустотой наверху опущена в чашку с жидкостью. Высота столба показывает атмосферное давление. Поднимайся в горы и следи, как оно падает: справа барометрическая формула (сплошная) и линейное приближение (пунктир).</p>
+
+  <div class="card">
+    <div class="seg" id="liq"><button data-r="13600" class="on">ртуть</button><button data-r="1000">вода</button></div>
+    <div class="controls">
+      <label><i>Высота над уровнем моря</i><span id="ho"></span><input id="h" type="range" min="0" max="9" step="0.1" value="0"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>На уровне моря сравни высоту ртутного и водяного столбов. Во сколько раз они различаются?</li>
+      <li>Поднимайся в горы. На какой высоте ртутный столб станет вдвое ниже, чем у моря?</li>
+      <li>До какой высоты линейная формула почти совпадает с барометрической? Почему потом расходится?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 9.8, P0 = 101325, HS = 8, RHO0 = 1.29;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let rl = 13600;
+const pExp = h => P0 * Math.exp(-h / HS), pLin = h => Math.max(0, P0 - RHO0 * G * h * 1000);
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const h = +$('h').value, p = pExp(h), col = p / (rl * G);              // высота столба, м
+  const hmax = P0 / (rl * G) * 1.15, base = H - 40, top = 30, k = (base - top) / hmax, tx = 90;
+  // чашка и трубка
+  g.fillStyle = rl === 13600 ? '#9ca3af' : '#93c5fd'; g.fillRect(tx - 60, base - 12, 120, 22);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(tx - 60, base - 24); g.lineTo(tx - 60, base + 10); g.lineTo(tx + 60, base + 10); g.lineTo(tx + 60, base - 24); g.stroke();
+  g.fillStyle = rl === 13600 ? '#6b7280' : '#60a5fa'; g.fillRect(tx - 8, base - 12 - col * k, 16, col * k);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.strokeRect(tx - 9, top, 18, base - top);
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('← пустота', tx + 14, top + 12);
+  // шкала
+  g.textAlign = 'right'; g.font = '11px system-ui';
+  const step = rl === 13600 ? 0.1 : 2;
+  for (let y = 0; y <= hmax; y += step) { const yy = base - 12 - y * k; g.fillText(rl === 13600 ? fmt(y * 1000, 0) + ' мм' : fmt(y, 0) + ' м', tx - 14, yy + 4);
+    g.strokeStyle = '#d1d5db'; g.beginPath(); g.moveTo(tx - 12, yy); g.lineTo(tx - 9, yy); g.stroke(); }
+  g.fillStyle = '#dc2626'; g.textAlign = 'left'; g.font = '600 13px system-ui';
+  g.fillText(rl === 13600 ? fmt(col * 1000, 0) + ' мм' : fmt(col, 2) + ' м', tx + 14, base - 12 - col * k + 4);
+  // график p(h)
+  const gx = Math.max(tx + 110, W * 0.4), gw = W - gx - 20, gy = top, gh = base - top;
+  if (gw > 80) {
+    const X = q => gx + gw * q / 9, Y = pp => gy + gh - gh * pp / P0;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center'; for (let q = 0; q <= 9; q += 3) g.fillText(q + ' км', X(q), gy + gh + 14);
+    g.textAlign = 'right'; for (let f = 0; f <= 1; f += 0.25) g.fillText(fmt(f * P0 / 1000, 0) + ' кПа', gx - 4, Y(f * P0) + 4);
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath(); for (let q = 0; q <= 9; q += 0.05) q ? g.lineTo(X(q), Y(pExp(q))) : g.moveTo(X(q), Y(pExp(q))); g.stroke();
+    g.setLineDash([6, 4]); g.strokeStyle = '#d97706'; g.lineWidth = 1.5; g.beginPath(); for (let q = 0; q <= 9; q += 0.05) q ? g.lineTo(X(q), Y(pLin(q))) : g.moveTo(X(q), Y(pLin(q))); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(h), Y(p), 5, 0, 7); g.fill();
+    [['Эльбрус', 5.64], ['Эверест', 8.85]].forEach(([n, q]) => { g.fillStyle = '#6b6b70'; g.textAlign = 'center'; g.fillText(n, X(q), Y(pExp(q)) - 10); });
+  }
+  $('ho').textContent = fmt(h * 1000, 0) + ' м';
+  $('read').innerHTML = ro('давление', fmt(p / 1000, 1) + ' кПа') + ro('в мм рт. ст.', fmt(p / (13600 * G) * 1000, 0)) + ro('доля от давления у моря', fmt(100 * p / P0, 0) + ' %') +
+    ro('линейная оценка', fmt(pLin(h) / 1000, 1) + ' кПа') + ro('высота столба', rl === 13600 ? fmt(col * 1000, 0) + ' мм' : fmt(col, 2) + ' м');
+}
+$('liq').querySelectorAll('button').forEach(b => b.onclick = () => { $('liq').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); rl = +b.dataset.r; draw(); });
+$('h').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

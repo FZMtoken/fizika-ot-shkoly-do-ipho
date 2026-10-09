@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Опыт Галилея</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Опыт Галилея</h1>
+  <p class="lead">Тело соскальзывает с левой плоскости высотой 2 м и въезжает на правую. Пунктир — начальная высота.
+    Чем меньше наклон правой плоскости, тем дальше приходится ехать, чтобы подняться на ту же высоту.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Наклон правой плоскости β:<span id="bo"></span><input id="b" type="range" min="0" max="60" step="1" value="20"></label>
+      <label>Коэффициент трения μ:<span id="mo"></span><input id="m" type="range" min="0" max="0.3" step="0.01" value="0"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Без трения меняй наклон правой плоскости. На какую высоту поднимается тело? Как далеко оно уезжает?</li>
+      <li>Сделай правую плоскость горизонтальной. Что происходит с телом без трения?</li>
+      <li>Добавь трение. Почему тело теперь не поднимается на прежнюю высоту?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const G = 9.8, H0 = 2, AL = 30 * Math.PI / 180, L1 = H0 / Math.sin(AL);
+let s = 0, v = 0, t = 0, hmax = 0, dmax = 0, running = false, last = null;
+const beta = () => +$('b').value * Math.PI / 180, mu = () => +$('m').value;
+function pos(ss) {                                   // координаты точки пути
+  if (ss <= L1) { const d = L1 - ss; return [-d * Math.cos(AL), d * Math.sin(AL)]; }
+  const d = ss - L1; return [d * Math.cos(beta()), d * Math.sin(beta())];
+}
+function step(h) {                                   // интегрирование вдоль пути
+  const onLeft = s < L1, ang = onLeft ? AL : beta(), grav = onLeft ? G * Math.sin(AL) : -G * Math.sin(beta());
+  const fr = mu() * G * Math.cos(ang);
+  if (Math.abs(v) < 1e-6) { if (Math.abs(grav) <= fr) { v = 0; return; } v += (grav - Math.sign(grav) * fr) * h; }
+  else { const a = grav - Math.sign(v) * fr, nv = v + a * h; v = (Math.sign(nv) !== Math.sign(v) && Math.abs(grav) <= fr) ? 0 : nv; }
+  s = Math.max(0, s + v * h); if (s === 0 && v < 0) v = 0;
+  if (s > L1) { hmax = Math.max(hmax, pos(s)[1]); dmax = Math.max(dmax, s - L1); }
+}
+function reset() { s = 0; v = 0; t = 0; hmax = 0; dmax = 0; running = false; $('play').textContent = '▶ Пуск'; draw(); }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const span = 16, k = Math.min(W / span, (H - 40) / 3), [bx] = pos(s);
+  const cam = Math.max(-L1 * Math.cos(AL) - 0.5, bx - span * 0.6);
+  const sx = x => (x - cam) * k, sy = y => H - 30 - y * k;
+  // земля и плоскости
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, sy(0), W, H - sy(0));
+  g.fillStyle = '#c9c2b0'; g.beginPath(); g.moveTo(sx(-L1 * Math.cos(AL)), sy(H0)); g.lineTo(sx(0), sy(0)); g.lineTo(sx(-L1 * Math.cos(AL)), sy(0)); g.fill();
+  const far = cam + span + 2, b = beta();
+  g.beginPath(); g.moveTo(sx(0), sy(0)); g.lineTo(sx(far), sy(far * Math.tan(b))); g.lineTo(sx(far), sy(0)); g.fill();
+  // метки расстояния вдоль земли
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = Math.ceil(cam / 2) * 2; x <= cam + span; x += 2) { g.fillRect(sx(x) - .5, sy(0), 1, 6); g.fillText(fmt(x, 0) + ' м', sx(x), sy(0) + 18); }
+  // начальная высота
+  g.strokeStyle = '#dc2626'; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(0, sy(H0)); g.lineTo(W, sy(H0)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#dc2626'; g.textAlign = 'left'; g.fillText('начальная высота 2 м', 6, sy(H0) - 6);
+  // тело
+  const [x, y] = pos(s), ang = s <= L1 ? -AL : b;
+  g.save(); g.translate(sx(x), sy(y)); g.rotate(-ang); g.fillStyle = '#2563eb'; g.fillRect(-10, -16, 20, 16); g.restore();
+
+  $('bo').textContent = $('b').value + '°'; $('mo').textContent = fmt(mu());
+  $('read').innerHTML = ro('время', fmt(t, 1) + ' с') + ro('скорость', fmt(Math.abs(v)) + ' м/с') +
+    ro('наибольшая высота справа', fmt(hmax) + ' м') + ro('путь по правой плоскости', dmax > 999 ? 'больше 999 м' : fmt(dmax, 1) + ' м');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000); for (let i = 0; i < 25; i++) step(dt / 25); t += dt; }
+  last = ts; draw();
+  if (Math.abs(v) < 1e-6 && s > 0 && t > 0.2) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (Math.abs(v) < 1e-6 && s > 0) reset(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['b', 'm'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

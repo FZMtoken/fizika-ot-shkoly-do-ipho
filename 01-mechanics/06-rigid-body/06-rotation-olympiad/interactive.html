@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Катушка на нитке</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Катушка на нитке</h1>
+  <p class="lead">Катушку тянут за нитку вправо-вверх. Пунктир продолжает линию нитки: если она проходит выше точки касания P, катушка катится к руке, если ниже — от руки. Катушка катится без проскальзывания.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="1" class="on">Нить сходит с оси снизу</button><button data-m="-1">Нить сходит с оси сверху</button></div>
+    <div class="controls">
+      <label><i>Угол нити с горизонтом α</i><span id="alo"></span><input id="al" type="range" min="0" max="85" step="1" value="20"></label>
+      <label><i>Отношение радиусов r / R</i><span id="kro"></span><input id="kr" type="range" min="0.2" max="0.8" step="0.05" value="0.5"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Тянуть</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Тяни горизонтально (α = 0) за нитку, сходящую снизу. Куда катится катушка?</li>
+      <li>Поднимай нитку. При каком угле катушка перестаёт разгоняться? Сравни с cos α = r / R.</li>
+      <li>Переведи нитку наверх оси. Есть ли теперь угол, при котором катушка поедет от тебя?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const D = Math.PI / 180, R = 0.1, M = 1, F = 1;           // м, кг, Н; момент инерции mR²/2
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let side = 1, x = 0, v = 0, running = false, last = null;   // side = 1 — нить снизу оси
+
+function calc() {
+  const al = +$('al').value * D, kr = +$('kr').value, r = kr * R;
+  const d = R * Math.cos(al) - side * r;                  // плечо силы относительно точки касания, «+» — к руке
+  const a = F * d * R / (1.5 * M * R * R);
+  return { al, kr, r, d, a, crit: side === 1 ? Math.acos(kr) / D : null };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = calc(), Rp = 70, rp = Rp * S.kr, y0 = H - 30, ox = W * 0.35 + x * 700, oy = y0 - Rp, phi = x / R;
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, y0, W, 30);
+  // катушка
+  g.fillStyle = '#e7d6ae'; g.strokeStyle = '#8b6f3a'; g.lineWidth = 2; g.beginPath(); g.arc(ox, oy, Rp, 0, 7); g.fill(); g.stroke();
+  g.strokeStyle = '#c8a96a'; for (let i = 0; i < 3; i++) { const a = phi + i * 2 * Math.PI / 3; g.beginPath(); g.moveTo(ox + rp * Math.cos(a), oy + rp * Math.sin(a)); g.lineTo(ox + Rp * Math.cos(a), oy + Rp * Math.sin(a)); g.stroke(); }
+  g.fillStyle = '#92400e'; g.beginPath(); g.arc(ox, oy, rp, 0, 7); g.fill();
+  // нить: касается оси снизу или сверху и уходит к руке
+  const ux = Math.cos(S.al), uy = -Math.sin(S.al), nx = side * Math.sin(S.al), ny = side * Math.cos(S.al);
+  const tx = ox + rp * nx, ty = oy + rp * ny, hx = tx + ux * 1000, hy = ty + uy * 1000;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(tx, ty); g.lineTo(hx, hy); g.stroke();
+  g.setLineDash([5, 5]); g.strokeStyle = '#2563eb'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx - ux * 1000, ty - uy * 1000); g.stroke(); g.setLineDash([]);
+  // точка касания P и плечо
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(ox, y0, 5, 0, 7); g.fill();
+  g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('P', ox + 8, y0 + 18);
+  // стрелка направления движения
+  const dir = Math.abs(S.d) < 1e-6 ? 0 : Math.sign(S.d);
+  g.fillStyle = dir > 0 ? '#16a34a' : dir < 0 ? '#dc2626' : '#6b6b70'; g.font = '600 14px system-ui';
+  g.fillText(dir > 0 ? 'катится к руке →' : dir < 0 ? '← катится от руки' : 'линия нити проходит через P: катушка не разгоняется', 12, 22);
+  $('alo').textContent = $('al').value + '°'; $('kro').textContent = fmt(S.kr);
+  $('read').innerHTML = ro('плечо относительно P', fmt(S.d * 100, 1) + ' см') + ro('R cos α', fmt(R * Math.cos(S.al) * 100, 1) + ' см') + ro('r', fmt(S.r * 100, 1) + ' см') +
+    ro('ускорение центра', fmt(S.a) + ' м/с²') + ro('критический угол', S.crit === null ? 'нет' : fmt(S.crit, 1) + '°');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  v += calc().a * dt; x += v * dt; draw();
+  if (Math.abs(x) * 700 > $('c').clientWidth * 0.3 || calc().a === 0) { running = false; $('play').textContent = '▶ Тянуть'; return; }
+  requestAnimationFrame(tick);
+}
+const reset = () => { running = false; x = 0; v = 0; $('play').textContent = '▶ Тянуть'; draw(); };
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Тянуть'; return; }
+  if (Math.abs(x) * 700 > $("c").clientWidth * 0.3) { x = 0; v = 0; } running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+$('reset').onclick = () => { $('al').value = 20; $('kr').value = 0.5; side = 1; $('mode').querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === 0)); reset(); };
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { $('mode').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); side = +b.dataset.m; reset(); });
+['al', 'kr'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Брусок на подвижном клине</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 9.5em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Брусок на подвижном клине</h1>
+  <p class="lead">Трения нет нигде. Брусок соскальзывает по грани и давит на клин — клин отъезжает в другую сторону.
+    Пунктир — траектория бруска относительно стола.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Масса клина M:<span id="Mo"></span><input id="M" type="range" min="0.5" max="20" step="0.5" value="2"></label>
+      <label>Масса бруска m:<span id="mo"></span><input id="m" type="range" min="0.5" max="5" step="0.5" value="1"></label>
+      <label>Угол клина α:<span id="ao"></span><input id="a" type="range" min="10" max="70" step="1" value="30"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Отпустить</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Отпусти брусок на лёгком клине. Куда движется клин? Сравни его ускорение с формулой.</li>
+      <li>Сделай клин очень тяжёлым. Что происходит с его ускорением и с траекторией бруска?</li>
+      <li>Найди угол, при котором клин разгоняется быстрее всего.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, HW = 1.2;         // высота клина, м
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, running = false, last = null;
+const P = () => ({ M: +$('M').value, m: +$('m').value, al: +$('a').value * Math.PI / 180 });
+function acc(p) {
+  const s = Math.sin(p.al), c = Math.cos(p.al), den = p.M + p.m * s * s;
+  const A = p.m * G * s * c / den, arel = (p.M + p.m) * G * s / den, N = p.M * p.m * G * c / den;
+  return { A, arel, N };
+}
+const L = p => HW / Math.sin(p.al);                // длина грани
+const tEnd = p => Math.sqrt(2 * L(p) * 0.9 / acc(p).arel);
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), { A, arel, N } = acc(p), tt = Math.min(t, tEnd(p)), base = HW / Math.tan(p.al);
+  const k = Math.min((W - 60) / (base + 3.5), (H - 60) / (HW + 0.4)), gy = H - 30, x0 = W * 0.45;
+  const X = x => x0 + x * k, Y = y => gy - y * k;
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, W, H - gy);
+  // клин: вершина слева вверху, грань спускается вправо; клин отъезжает влево
+  const xw = -A * tt * tt / 2;
+  g.fillStyle = '#c9c2b0'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(X(xw - 0.3), Y(0)); g.lineTo(X(xw - 0.3), Y(HW)); g.lineTo(X(xw), Y(HW)); g.lineTo(X(xw + base), Y(0)); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(fmt(p.M, 1) + ' кг', X(xw), Y(HW * 0.3));
+  // брусок: путь вдоль грани относительно клина
+  const s0 = 0.08 * L(p), sr = s0 + arel * tt * tt / 2;
+  const bx = xw + sr * Math.cos(p.al), by = HW - sr * Math.sin(p.al);
+  // траектория бруска относительно стола — прямая
+  g.strokeStyle = '#dc2626'; g.setLineDash([5, 4]); g.beginPath(); const bx0 = s0 * Math.cos(p.al), by0 = HW - s0 * Math.sin(p.al);
+  g.moveTo(X(bx0), Y(by0)); g.lineTo(X(bx), Y(by)); g.stroke(); g.setLineDash([]);
+  g.save(); g.translate(X(bx), Y(by)); g.rotate(p.al); g.fillStyle = '#2563eb'; g.fillRect(-16, -22, 32, 22); g.restore();
+  const arrow = (x1, y1, dx, dy, col, lab) => { const x2 = x1 + dx, y2 = y1 + dy, Ln = Math.hypot(dx, dy); if (Ln < 4) return; const ux = dx / Ln, uy = dy / Ln;
+    g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+    g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14, y2 + uy * 14 + 4); };
+  arrow(X(xw + base * 0.3), Y(0) + 16, -A * 12, 0, '#1d1d1f', 'A');
+  const ang = Math.atan2(by - by0, bx - bx0);
+  $('Mo').textContent = fmt(p.M, 1) + ' кг'; $('mo').textContent = fmt(p.m, 1) + ' кг'; $('ao').textContent = $('a').value + '°';
+  $('read').innerHTML = ro('ускорение клина A', fmt(A) + ' м/с²') + ro('брусок отн. клина', fmt(arel) + ' м/с²') +
+    ro('сила реакции N', fmt(N) + ' Н') + ro('N на неподвижном клине', fmt(p.m * G * Math.cos(p.al)) + ' Н') +
+    ro('наклон траектории бруска', fmt(Math.abs(ang) * 180 / Math.PI, 1) + '°');
+}
+function tick(ts) { if (!running) return; if (last !== null) t += Math.min(0.05, (ts - last) / 1000) * 0.6; last = ts; draw();
+  if (t >= tEnd(P())) { running = false; $('play').textContent = '▶ Отпустить'; return; } requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Отпустить'; draw(); }
+$('play').onclick = () => { if (t >= tEnd(P())) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Отпустить'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['M', 'm', 'a'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

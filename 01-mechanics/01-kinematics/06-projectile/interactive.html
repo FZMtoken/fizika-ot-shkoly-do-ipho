@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Бросок под углом к горизонту</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Бросок под углом к горизонту</h1>
+  <p class="lead">По горизонтали — равномерное движение, по вертикали — свободное падение. Стрелки показывают скорость и её проекции.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Скорость v₀:<span id="v0o"></span><input id="v0" type="range" min="5" max="30" step="0.5" value="20"></label>
+      <label>Угол α к горизонту:<span id="ao"></span><input id="a" type="range" min="0" max="90" step="1" value="30"></label>
+      <label>Высота точки броска h:<span id="ho"></span><input id="h" type="range" min="0" max="30" step="1" value="0"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+      <button class="tog" id="cmp">Сравнить с углом 90° − α</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь скорость 20 м/с и найди угол, при котором дальность наибольшая.</li>
+      <li>Включи сравнение и бросай под 30° и под 60°. Что общего у траекторий, а что разного?</li>
+      <li>Следи за стрелками проекций скорости. Какая из них не меняется в полёте?</li>
+      <li>Подними точку броска на 20 м. Какой угол теперь даёт наибольшую дальность — больше или меньше 45°?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 9.8;
+const fmt = (n, p = 1) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let t = 0, running = false, last = null, cmp = false;
+const P = () => ({ v0: +$('v0').value, a: +$('a').value * Math.PI / 180, h: +$('h').value });
+function traj(v0, a, h) {
+  const vx = v0 * Math.cos(a), vy = v0 * Math.sin(a);
+  const T = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;
+  return { vx, vy, T, L: vx * T, H: h + vy * vy / (2 * G),
+    x: tt => vx * tt, y: tt => h + vy * tt - G * tt * tt / 2, Vy: tt => vy - G * tt };
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, Hc = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = Hc * r; c.style.height = Hc + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const { v0, a, h } = P(), A = traj(v0, a, h), B = traj(v0, Math.PI / 2 - a, h);
+  // масштаб: всё, что показываем, помещается; метры одинаковы по обеим осям
+  const xMax = Math.max(A.L, cmp ? B.L : 0, 10) * 1.08, yMax = Math.max(A.H, cmp ? B.H : 0, h, 5) * 1.15;
+  const L = 36, R = 10, Tp = 12, Bt = 26, k = Math.min((W - L - R) / xMax, (Hc - Tp - Bt) / yMax);
+  const sx = x => L + x * k, sy = y => Hc - Bt - y * k;
+  // земля и сетка
+  g.fillStyle = '#eef3f8'; g.fillRect(0, 0, W, sy(0)); g.fillStyle = '#d9d6cc'; g.fillRect(0, sy(0), W, Hc - sy(0));
+  const st = [1, 2, 5, 10, 20, 50].find(s => s * k >= 40) || 100;
+  g.strokeStyle = 'rgba(0,0,0,.06)'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = 0; sx(x) <= W; x += st) { g.beginPath(); g.moveTo(sx(x), 0); g.lineTo(sx(x), sy(0)); g.stroke(); g.fillText(x + ' м', sx(x), sy(0) + 15); }
+  g.textAlign = 'right';
+  for (let y = st; sy(y) >= 0; y += st) { g.beginPath(); g.moveTo(L, sy(y)); g.lineTo(W, sy(y)); g.stroke(); g.fillText(y, L - 4, sy(y) + 4); }
+  if (h > 0) { g.fillStyle = '#b8b2a3'; g.fillRect(sx(0) - 14, sy(h), 14, sy(0) - sy(h)); }
+
+  const path = (Tr, col, dash, alpha) => { g.strokeStyle = col; g.globalAlpha = alpha; g.lineWidth = 2; g.setLineDash(dash);
+    g.beginPath(); for (let i = 0; i <= 200; i++) { const tt = Tr.T * i / 200; i ? g.lineTo(sx(Tr.x(tt)), sy(Tr.y(tt))) : g.moveTo(sx(0), sy(h)); }
+    g.stroke(); g.setLineDash([]); g.globalAlpha = 1; };
+  if (cmp) path(B, '#9333ea', [6, 5], .8);
+  path(A, '#1d1d1f', [3, 4], .35);
+  // стробоскоп
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  for (let tt = 0; tt <= Math.min(t, A.T) + 1e-9; tt += 0.2) { g.beginPath(); g.arc(sx(A.x(tt)), sy(A.y(tt)), 3.5, 0, 7); g.fill(); }
+  const tc = Math.min(t, A.T), X = sx(A.x(tc)), Y = sy(A.y(tc));
+  // векторы скорости
+  const ks = 60 / v0;                      // стрелка начальной скорости — 60 пикселей
+  const arrow = (x1, y1, x2, y2, col, lab) => { const Lr = Math.hypot(x2 - x1, y2 - y1); if (Lr < 3) return;
+    const ux = (x2 - x1) / Lr, uy = (y2 - y1) / Lr; g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+    g.font = 'italic 600 14px serif'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 12, y2 + uy * 12 + 4); };
+  const vy = A.Vy(tc);
+  arrow(X, Y, X + A.vx * ks, Y, '#16a34a', 'vₓ');
+  arrow(X, Y, X, Y - vy * ks, '#2563eb', 'vᵧ');
+  arrow(X, Y, X + A.vx * ks, Y - vy * ks, '#dc2626', 'v');
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X, Y, 6, 0, 7); g.fill();
+
+  $('v0o').textContent = fmt(v0) + ' м/с'; $('ao').textContent = $('a').value + '°'; $('ho').textContent = fmt(h, 0) + ' м';
+  $('read').innerHTML = ro('время полёта', fmt(A.T, 2) + ' с') + ro('дальность', fmt(A.L) + ' м') + ro('наибольшая высота', fmt(A.H) + ' м') +
+    ro(cmp ? `дальность при ${90 - +$('a').value}°` : 'время t', cmp ? fmt(B.L) + ' м' : fmt(tc, 2) + ' с') +
+    ro('vₓ', fmt(A.vx) + ' м/с') + ro('vᵧ', fmt(vy) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const T = traj(P().v0, P().a, P().h).T;
+  if (last !== null) t = Math.min(T, t + (ts - last) / 1000);
+  last = ts; draw();
+  if (t >= T) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { const T = traj(P().v0, P().a, P().h).T; if (t >= T) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('cmp').onclick = () => { cmp = !cmp; $('cmp').classList.toggle('on', cmp); draw(); };
+['v0', 'a', 'h'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

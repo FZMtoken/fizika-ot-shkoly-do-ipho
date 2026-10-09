@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Итоговая работа по статике</title>
+<link rel="stylesheet" href="../../../assets/katex/katex.min.css">
+<link rel="stylesheet" href="../../../assets/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../../../index.html">Физика: от школы до IPhO</a>
+  <button class="menu-btn" type="button" aria-label="Оглавление">☰ Оглавление</button>
+</header>
+<div class="layout with-side">
+  <nav class="side"><div class="side-sec">Введение и математика физика</div><details class="side-ch"><summary>Физика и измерения</summary><ol><li><a href="../../../00-introduction/01-measurements/01-units/index.html">Что такое физика. Единицы СИ, приставки, стандартный вид, значащие цифры</a></li><li><a href="../../../00-introduction/01-measurements/02-dimensions/index.html">Размерности. Проверка ответа. Метод размерностей</a></li><li><a href="../../../00-introduction/01-measurements/03-estimates/index.html">Оценки и порядки величин</a></li></ol></details><details class="side-ch"><summary>Математика физика</summary><ol><li><a href="../../../00-introduction/02-math/01-algebra/index.html">Алгебра физика</a></li><li><a href="../../../00-introduction/02-math/02-functions-graphs/index.html">Функции и графики</a></li><li><a href="../../../00-introduction/02-math/03-trigonometry/index.html">Тригонометрия</a></li><li><a href="../../../00-introduction/02-math/04-vectors/index.html">Векторы</a></li><li><a href="../../../00-introduction/02-math/05-approximations/index.html">Приближения</a></li><li><a href="../../../00-introduction/02-math/06-derivative/index.html">Производная</a></li><li><a href="../../../00-introduction/02-math/07-integral/index.html">Интеграл</a></li><li><a href="../../../00-introduction/02-math/08-differential-equations/index.html">Простейшие дифференциальные уравнения</a></li><li><a href="../../../00-introduction/02-math/09-complex-numbers/index.html">Комплексные числа</a></li></ol></details><div class="side-sec">Механика</div><details class="side-ch"><summary>Кинематика</summary><ol><li><a href="../../01-kinematics/01-motion-and-frames/index.html">Механическое движение. Система отсчёта. Относительность движения</a></li><li><a href="../../01-kinematics/02-displacement-vectors/index.html">Путь и перемещение. Сложение скоростей на плоскости</a></li><li><a href="../../01-kinematics/03-uniform-motion/index.html">Равномерное прямолинейное движение</a></li><li><a href="../../01-kinematics/04-uniform-acceleration/index.html">Равноускоренное движение</a></li><li><a href="../../01-kinematics/05-free-fall/index.html">Свободное падение</a></li><li><a href="../../01-kinematics/06-projectile/index.html">Движение тела, брошенного под углом к горизонту</a></li><li><a href="../../01-kinematics/07-circular-motion/index.html">Движение по окружности</a></li><li><a href="../../01-kinematics/08-kinematics-olympiad/index.html">Олимпиадная кинематика</a></li><li><a href="../../01-kinematics/09-final-test/index.html">Итоговая работа по кинематике</a></li></ol></details><details class="side-ch"><summary>Динамика</summary><ol><li><a href="../../02-dynamics/01-first-law/index.html">Первый закон Ньютона. Инерция. Инерциальные системы отсчёта</a></li><li><a href="../../02-dynamics/02-second-law/index.html">Сила. Второй закон Ньютона</a></li><li><a href="../../02-dynamics/03-third-law/index.html">Третий закон Ньютона</a></li><li><a href="../../02-dynamics/04-weight/index.html">Сила тяжести и вес. Невесомость и перегрузки</a></li><li><a href="../../02-dynamics/05-elasticity/index.html">Сила упругости. Закон Гука</a></li><li><a href="../../02-dynamics/06-friction/index.html">Сила трения</a></li><li><a href="../../02-dynamics/07-connected-bodies/index.html">Движение связанных тел</a></li><li><a href="../../02-dynamics/08-inclined-plane/index.html">Движение по наклонной плоскости</a></li><li><a href="../../02-dynamics/09-circular-dynamics/index.html">Динамика движения по окружности</a></li><li><a href="../../02-dynamics/10-noninertial-frames/index.html">Неинерциальные системы отсчёта. Силы инерции</a></li><li><a href="../../02-dynamics/11-dynamics-olympiad/index.html">Олимпиадная динамика</a></li><li><a href="../../02-dynamics/12-final-test/index.html">Итоговая работа по динамике</a></li></ol></details><details class="side-ch"><summary>Законы сохранения</summary><ol><li><a href="../../03-conservation/01-momentum/index.html">Импульс. Закон сохранения импульса</a></li><li><a href="../../03-conservation/02-jet-propulsion/index.html">Реактивное движение</a></li><li><a href="../../03-conservation/03-work-power/index.html">Работа и мощность</a></li><li><a href="../../03-conservation/04-energy/index.html">Кинетическая и потенциальная энергия</a></li><li><a href="../../03-conservation/05-energy-conservation/index.html">Закон сохранения механической энергии</a></li><li><a href="../../03-conservation/06-nonconservative/index.html">Работа сил трения и потери энергии</a></li><li><a href="../../03-conservation/07-collisions/index.html">Столкновения</a></li><li><a href="../../03-conservation/08-center-of-mass/index.html">Центр масс</a></li><li><a href="../../03-conservation/09-conservation-olympiad/index.html">Олимпиадные задачи на законы сохранения</a></li><li><a href="../../03-conservation/10-final-test/index.html">Итоговая работа по законам сохранения</a></li></ol></details><details class="side-ch"><summary>Гравитация</summary><ol><li><a href="../../04-gravitation/01-universal-gravitation/index.html">Закон всемирного тяготения</a></li><li><a href="../../04-gravitation/02-gravity-planets/index.html">Ускорение свободного падения на планетах и высотах</a></li><li><a href="../../04-gravitation/03-satellites/index.html">Спутники. Первая космическая скорость</a></li><li><a href="../../04-gravitation/04-kepler/index.html">Законы Кеплера</a></li><li><a href="../../04-gravitation/05-gravitational-energy/index.html">Энергия тяготения. Вторая космическая скорость</a></li><li><a href="../../04-gravitation/06-gravitation-olympiad/index.html">Олимпиадные задачи по гравитации</a></li><li><a href="../../04-gravitation/07-final-test/index.html">Итоговая работа по гравитации</a></li></ol></details><details class="side-ch" open><summary>Статика</summary><ol><li><a href="../01-equilibrium-forces/index.html">Равновесие тела. Сложение сил</a></li><li><a href="../02-torque/index.html">Момент силы. Правило моментов. Рычаг</a></li><li><a href="../03-center-of-gravity/index.html">Центр тяжести. Виды равновесия и устойчивость</a></li><li><a href="../04-simple-machines/index.html">Простые механизмы. Золотое правило механики. КПД</a></li><li><a href="../05-rigid-body-equilibrium/index.html">Равновесие твёрдого тела: опоры, шарниры, трение</a></li><li><a href="../06-statics-olympiad/index.html">Олимпиадные задачи по статике</a></li><li class="current"><a href="index.html">Итоговая работа по статике</a></li></ol></details><details class="side-ch"><summary>Вращение твёрдого тела</summary><ol><li><a href="../../06-rigid-body/01-rotation-kinematics/index.html">Кинематика вращения твёрдого тела</a></li><li><a href="../../06-rigid-body/02-moment-of-inertia/index.html">Момент инерции. Энергия вращения</a></li><li><a href="../../06-rigid-body/03-rotation-dynamics/index.html">Основное уравнение динамики вращения</a></li><li><a href="../../06-rigid-body/04-rolling/index.html">Качение</a></li><li><a href="../../06-rigid-body/05-angular-momentum/index.html">Момент импульса и его сохранение</a></li><li><a href="../../06-rigid-body/06-rotation-olympiad/index.html">Олимпиадные задачи на вращение</a></li><li><a href="../../06-rigid-body/07-final-test/index.html">Итоговая работа по вращению твёрдого тела</a></li></ol></details><details class="side-ch"><summary>Механика жидкостей и газов</summary><ol><li><a href="../../07-fluids/01-pressure/index.html">Давление в жидкостях. Закон Паскаля. Сообщающиеся сосуды</a></li><li><a href="../../07-fluids/02-archimedes/index.html">Закон Архимеда. Плавание тел</a></li><li><a href="../../07-fluids/03-atmosphere/index.html">Атмосферное давление</a></li><li><a href="../../07-fluids/04-bernoulli/index.html">Уравнение неразрывности. Уравнение Бернулли</a></li><li><a href="../../07-fluids/05-viscosity/index.html">Вязкость. Сопротивление движению в жидкости и газе</a></li><li><a href="../../07-fluids/06-fluids-olympiad/index.html">Олимпиадные задачи по механике жидкостей и газов</a></li><li><a href="../../07-fluids/07-final-test/index.html">Итоговая работа по механике жидкостей и газов</a></li></ol></details><div class="side-sec">Колебания и волны</div><details class="side-ch"><summary>Механические колебания</summary><ol><li><a href="../../../02-oscillations-waves/01-oscillations/01-harmonic/index.html">Гармонические колебания: амплитуда, период, частота, фаза</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/02-spring-pendulum/index.html">Пружинный маятник. Энергия колебаний</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/03-pendulum/index.html">Математический и физический маятники</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/04-oscillation-equation/index.html">Уравнение гармонических колебаний. Как найти период любой системы</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/05-damped/index.html">Затухающие колебания. Добротность</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/06-forced-resonance/index.html">Вынужденные колебания. Резонанс</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/07-oscillations-olympiad/index.html">Олимпиадные задачи на колебания</a></li><li><a href="../../../02-oscillations-waves/01-oscillations/08-final-test/index.html">Итоговая работа по механическим колебаниям</a></li></ol></details><details class="side-ch"><summary>Волны</summary><ol><li><a href="../../../02-oscillations-waves/02-waves/01-traveling-waves/index.html">Механические волны. Длина волны и скорость</a></li><li><a href="../../../02-oscillations-waves/02-waves/02-wave-equation/index.html">Уравнение бегущей волны. Энергия волны</a></li><li><a href="../../../02-oscillations-waves/02-waves/03-interference/index.html">Интерференция волн</a></li><li><a href="../../../02-oscillations-waves/02-waves/04-standing-waves/index.html">Стоячие волны. Струны и трубы</a></li><li><a href="../../../02-oscillations-waves/02-waves/05-huygens-diffraction/index.html">Принцип Гюйгенса. Отражение, преломление, дифракция волн</a></li><li><a href="../../../02-oscillations-waves/02-waves/06-waves-olympiad/index.html">Олимпиадные задачи на волны</a></li><li><a href="../../../02-oscillations-waves/02-waves/07-final-test/index.html">Итоговая работа по волнам</a></li></ol></details><details class="side-ch"><summary>Звук</summary><ol><li><a href="../../../02-oscillations-waves/03-sound/01-sound/index.html">Звук. Скорость, громкость, высота, тембр. Децибелы</a></li><li><a href="../../../02-oscillations-waves/03-sound/02-doppler/index.html">Эффект Доплера. Ударная волна</a></li><li><a href="../../../02-oscillations-waves/03-sound/03-sound-olympiad/index.html">Олимпиадные задачи на звук</a></li><li><a href="../../../02-oscillations-waves/03-sound/04-final-test/index.html">Итоговая работа по разделу «Колебания и волны»</a></li></ol></details><div class="side-sec">Молекулярная физика и термодинамика</div><details class="side-ch"><summary>Строение вещества и идеальный газ</summary><ol><li><a href="../../../03-thermodynamics/01-molecular/01-molecules/index.html">Строение вещества. Молекулы, количество вещества, число Авогадро</a></li><li><a href="../../../03-thermodynamics/01-molecular/02-temperature/index.html">Температура и тепловое равновесие. Шкалы. Тепловое расширение</a></li><li><a href="../../../03-thermodynamics/01-molecular/03-ideal-gas-law/index.html">Уравнение состояния идеального газа</a></li><li><a href="../../../03-thermodynamics/01-molecular/04-gas-processes/index.html">Изопроцессы и их графики</a></li><li><a href="../../../03-thermodynamics/01-molecular/05-kinetic-theory/index.html">Основное уравнение МКТ. Энергия и скорость молекул</a></li><li><a href="../../../03-thermodynamics/01-molecular/06-distributions/index.html">Распределение Максвелла, барометрическая формула, длина свободного пробега</a></li><li><a href="../../../03-thermodynamics/01-molecular/07-molecular-olympiad/index.html">Олимпиадные задачи на газы</a></li><li><a href="../../../03-thermodynamics/01-molecular/08-final-test/index.html">Итоговая работа по молекулярной физике</a></li></ol></details><details class="side-ch"><summary>Термодинамика</summary><ol><li><a href="../../../03-thermodynamics/02-thermo/01-heat/index.html">Внутренняя энергия и теплота. Теплоёмкость. Уравнение теплового баланса</a></li><li><a href="../../../03-thermodynamics/02-thermo/02-first-law/index.html">Работа газа. Первый закон термодинамики</a></li><li><a href="../../../03-thermodynamics/02-thermo/03-adiabatic/index.html">Первый закон для изопроцессов. Адиабата. Теплоёмкости газа</a></li><li><a href="../../../03-thermodynamics/02-thermo/04-heat-engines/index.html">Тепловые двигатели и холодильники. Цикл Карно</a></li><li><a href="../../../03-thermodynamics/02-thermo/05-entropy/index.html">Второй закон термодинамики. Энтропия</a></li><li><a href="../../../03-thermodynamics/02-thermo/06-heat-transfer/index.html">Теплопередача: теплопроводность, конвекция, излучение</a></li><li><a href="../../../03-thermodynamics/02-thermo/07-thermo-olympiad/index.html">Олимпиадные задачи по термодинамике</a></li><li><a href="../../../03-thermodynamics/02-thermo/08-final-test/index.html">Итоговая работа по термодинамике</a></li></ol></details><details class="side-ch"><summary>Фазовые переходы</summary><ol><li><a href="../../../03-thermodynamics/03-phases/01-melting/index.html">Плавление и кристаллизация</a></li><li><a href="../../../03-thermodynamics/03-phases/02-evaporation/index.html">Испарение и кипение. Насыщенный пар. Влажность</a></li><li><a href="../../../03-thermodynamics/03-phases/03-surface-tension/index.html">Поверхностное натяжение. Капиллярные явления</a></li><li><a href="../../../03-thermodynamics/03-phases/04-phase-diagrams/index.html">Фазовые диаграммы. Тройная точка. Уравнение Клапейрона — Клаузиуса</a></li><li><a href="../../../03-thermodynamics/03-phases/05-phases-olympiad/index.html">Олимпиадные задачи на фазовые переходы</a></li><li><a href="../../../03-thermodynamics/03-phases/06-final-test/index.html">Итоговая работа по разделу «Молекулярная физика и термодинамика»</a></li></ol></details></nav>
+  <main>
+<nav class="crumbs"><a href="../../../index.html">Курс</a> › Механика › Статика</nav>
+<h1>Итоговая работа по статике</h1>
+<div class="meta-line">
+  <span class="grade">9 класс</span><span class="grade">10 класс</span>
+  
+</div>
+<p class="prereq">Перед уроком полезно знать: <a href="../01-equilibrium-forces/index.html">Равновесие тела. Сложение сил</a>, <a href="../02-torque/index.html">Момент силы. Правило моментов. Рычаг</a>, <a href="../03-center-of-gravity/index.html">Центр тяжести. Виды равновесия и устойчивость</a>, <a href="../04-simple-machines/index.html">Простые механизмы. Золотое правило механики. КПД</a>, <a href="../05-rigid-body-equilibrium/index.html">Равновесие твёрдого тела: опоры, шарниры, трение</a></p>
+<article class="lesson"><h2>Как устроена работа</h2>
+<ul>
+<li><strong>Контрольная, уровни A–B.</strong> 10 задач по школьным подтемам главы. Рекомендуемое время — 45 минут.
+Отличный результат — 9–10 верных ответов, хороший — 7–8. Если меньше 6, вернись к подтемам, где были ошибки: у каждой задачи указана тема.</li>
+<li><strong>Олимпиадная подборка, уровни C–D.</strong> 5 задач для подготовки к олимпиадам. Время не ограничено.</li>
+</ul>
+<p>Сначала реши всё сам, без подсказок, потом проверь ответы. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>g</mi><mo>=</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">g = 10</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">10</span></span></span></span> м/с².</p>
+<h2>Шпаргалка главы</h2>
+<table>
+<thead>
+<tr>
+<th>Тема</th>
+<th>Главное</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Равновесие точки</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><mover accent="true"><mi>F</mi><mo>⃗</mo></mover><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\sum\vec F = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.2163em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord katex-accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.9663em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span></span><span style="top:-3.2523em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1522em;"><span class="katex-overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"/></svg></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>; в проекциях <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><msub><mi>F</mi><mi>x</mi></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\sum F_x = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><msub><mi>F</mi><mi>y</mi></msub><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\sum F_y = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>; три силы образуют замкнутый треугольник</td>
+</tr>
+<tr>
+<td>Груз на двух нитях</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>m</mi><mi>g</mi></mrow><mrow><mn>2</mn><mi>sin</mi><mo>⁡</mo><mi>α</mi></mrow></mfrac></mstyle></mrow><annotation encoding="application/x-tex">T = \dfrac{mg}{2\sin\alpha}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.7936em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">sin</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi></mrow><annotation encoding="application/x-tex">\alpha</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span></span></span> — с горизонтом); чем положе нить, тем сильнее натянута</td>
+</tr>
+<tr>
+<td>Момент силы</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mo>=</mo><mi>F</mi><mi>d</mi><mo>=</mo><mi>F</mi><mi>r</mi><mi>sin</mi><mo>⁡</mo><mi>α</mi></mrow><annotation encoding="application/x-tex">M = Fd = Fr\sin\alpha</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">sin</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span></span></span>; <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi></mrow><annotation encoding="application/x-tex">d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span> — плечо, расстояние до линии действия</td>
+</tr>
+<tr>
+<td>Правило моментов</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><mi>M</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\sum M = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> относительно любой точки; ось — там, где неизвестные силы</td>
+</tr>
+<tr>
+<td>Центр тяжести</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>x</mi><mi>c</mi></msub><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mo>∑</mo><msub><mi>m</mi><mi>i</mi></msub><msub><mi>x</mi><mi>i</mi></msub></mrow><mrow><mo>∑</mo><msub><mi>m</mi><mi>i</mi></msub></mrow></mfrac></mstyle></mrow><annotation encoding="application/x-tex">x_c = \dfrac{\sum m_ix_i}{\sum m_i}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.363em;vertical-align:-0.936em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>; вырез — отрицательная масса</td>
+</tr>
+<tr>
+<td>Устойчивость</td>
+<td>устойчиво, если центр тяжести при отклонении поднимается; опрокидывание: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">tg</mi><mo>⁡</mo><mi>α</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>a</mi><mi mathvariant="normal">/</mi><mn>2</mn></mrow><msub><mi>h</mi><mi>c</mi></msub></mfrac></mstyle></mrow><annotation encoding="application/x-tex">\operatorname{tg}\alpha = \dfrac{a/2}{h_c}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.263em;vertical-align:-0.836em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">h</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">a</span><span class="mord">/2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.836em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>, скольжение: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">tg</mi><mo>⁡</mo><mi>α</mi><mo>=</mo><mi>μ</mi></mrow><annotation encoding="application/x-tex">\operatorname{tg}\alpha = \mu</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">μ</span></span></span></span></td>
+</tr>
+<tr>
+<td>Простые механизмы</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mi>s</mi><mo>=</mo><mi>P</mi><mi>h</mi></mrow><annotation encoding="application/x-tex">Fs = Ph</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord mathnormal">h</span></span></span></span> без трения; полиспаст <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mi>P</mi><mi>n</mi></mfrac></mstyle></mrow><annotation encoding="application/x-tex">F = \dfrac{P}{n}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">n</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><mi>n</mi><mi>h</mi></mrow><annotation encoding="application/x-tex">s = nh</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">nh</span></span></span></span>; <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>η</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>P</mi><mi>h</mi></mrow><mrow><mi>F</mi><mi>s</mi></mrow></mfrac></mstyle></mrow><annotation encoding="application/x-tex">\eta = \dfrac{Ph}{Fs}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">η</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0574em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal">s</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord mathnormal">h</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></td>
+</tr>
+<tr>
+<td>Твёрдое тело</td>
+<td>три уравнения: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><msub><mi>F</mi><mi>x</mi></msub></mrow><annotation encoding="application/x-tex">\sum F_x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><msub><mi>F</mi><mi>y</mi></msub></mrow><annotation encoding="application/x-tex">\sum F_y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">\sum M</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span></span></span></span>; шарнир — две неизвестные; лестница у гладкой стены <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>μ</mi><mi>min</mi><mo>⁡</mo></msub><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>1</mn><mrow><mn>2</mn><mi mathvariant="normal">tg</mi><mo>⁡</mo><mi>α</mi></mrow></mfrac></mstyle></mrow><annotation encoding="application/x-tex">\mu_{\min} = \dfrac{1}{2\operatorname{tg}\alpha}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3175em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mop mtight"><span class="mtight">m</span><span class="mtight">i</span><span class="mtight">n</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></td>
+</tr>
+</tbody></table>
+<h2>Задачи</h2>
+<p><a href="#problems">Все задачи работы</a>. Номера k01–k10 — контрольная, o1–o5 — олимпиадная подборка.</p>
+</article>
+<section class="problems" id="problems">
+  <h2>Задачи для самостоятельного решения</h2>
+  <div class="filter" role="group" aria-label="Фильтр по уровню">
+    <button type="button" class="on" data-level="all">Все (15)</button>
+    <button type="button" data-level="A"><span class="lvl lvl-A">A</span> Базовый (6)</button><button type="button" data-level="B"><span class="lvl lvl-B">B</span> Продвинутый (4)</button><button type="button" data-level="C"><span class="lvl lvl-C">C</span> Олимпиада: область (3)</button><button type="button" data-level="D"><span class="lvl lvl-D">D</span> Олимпиада: республика (2)</button>
+    
+  </div>
+  
+<article class="problem" id="mech-stat-07-k01" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Две силы</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>К телу приложены силы 30 Н и 40 Н, направленные под прямым углом друг к другу. Найди их равнодействующую.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="50" data-tol="1%">
+      <label><span class="f-label">равнодействующая:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><msqrt><mrow><msup><mn>30</mn><mn>2</mn></msup><mo>+</mo><msup><mn>40</mn><mn>2</mn></msup></mrow></msqrt><mo>=</mo><mn>50</mn></mrow><annotation encoding="application/x-tex">F = \sqrt{30^2 + 40^2} = 50</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.04em;vertical-align:-0.1266em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9134em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord">3</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">4</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span><span style="top:-2.8734em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1266em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">50</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 50 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Равновесие тела. Сложение сил».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>сложение сил</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k02" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Гирлянда</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Груз массой 6 кг висит посередине троса, обе половины которого составляют с горизонтом угол 30°. Найди натяжение троса.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="60" data-tol="1%">
+      <label><span class="f-label">натяжение:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>m</mi><mi>g</mi></mrow><mrow><mn>2</mn><mi>sin</mi><mo>⁡</mo><mn>30</mn><mi mathvariant="normal">°</mi></mrow></mfrac></mstyle><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>60</mn><mn>1</mn></mfrac></mstyle><mo>=</mo><mn>60</mn></mrow><annotation encoding="application/x-tex">T = \dfrac{mg}{2\sin 30°} = \dfrac{60}{1} = 60</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.7936em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">sin</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">30°</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">60</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">60</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 60 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Равновесие тела. Сложение сил». При угле 30° каждая половина натянута с силой, равной весу груза.</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>груз на двух нитях</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k03" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Момент силы</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>К гаечному ключу перпендикулярно ему приложена сила 40 Н на расстоянии 25 см от оси гайки. Найди момент силы.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="10" data-tol="1%">
+      <label><span class="f-label">момент силы:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н·м</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>M</mi><mo>=</mo><mn>40</mn><mo>⋅</mo><mn>0,25</mn><mo>=</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">M = 40\cdot 0{,}25 = 10</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">M</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">40</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">25</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">10</span></span></span></span> Н·м.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 10 Н·м.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Момент силы. Рычаг».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>момент силы</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k04" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Рычаг</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>На короткое плечо рычага длиной 0,4 м давит груз массой 30 кг. Какую силу нужно приложить к длинному плечу длиной 1,2 м? Силы перпендикулярны рычагу.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="100" data-tol="1%">
+      <label><span class="f-label">сила:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>300</mn><mo>⋅</mo><mn>0,4</mn></mrow><mn>1,2</mn></mfrac></mstyle><mo>=</mo><mn>100</mn></mrow><annotation encoding="application/x-tex">F = \dfrac{300\cdot 0{,}4}{1{,}2} = 100</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">300</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">4</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">100</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 100 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Момент силы. Рычаг».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>рычаг</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k05" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Центр тяжести гантели</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>На концах лёгкого стержня длиной 1 м закреплены грузы 2 кг и 3 кг. На каком расстоянии от груза 2 кг находится центр тяжести?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="0.6" data-tol="1%">
+      <label><span class="f-label">расстояние от груза 2 кг:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">м</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>x</mi><mi>c</mi></msub><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>2</mn><mo>⋅</mo><mn>0</mn><mo>+</mo><mn>3</mn><mo>⋅</mo><mn>1</mn></mrow><mn>5</mn></mfrac></mstyle><mo>=</mo><mn>0,6</mn></mrow><annotation encoding="application/x-tex">x_c = \dfrac{2\cdot 0 + 3\cdot 1}{5} = 0{,}6</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">c</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">5</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">3</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">6</span></span></span></span> м.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 0,6 м.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Центр тяжести».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>центр тяжести</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k06" data-level="A">
+  <header class="p-head">
+    <span class="lvl lvl-A" title="Базовый">A</span>
+    <h3>Подвижный блок</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Груз массой 60 кг поднимают лёгким подвижным блоком. Какую силу нужно прикладывать к верёвке?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="300" data-tol="1%">
+      <label><span class="f-label">сила:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>600</mn><mn>2</mn></mfrac></mstyle><mo>=</mo><mn>300</mn></mrow><annotation encoding="application/x-tex">F = \dfrac{600}{2} = 300</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">600</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">300</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 300 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Простые механизмы».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>подвижный блок</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k07" data-level="B">
+  <header class="p-head">
+    <span class="lvl lvl-B" title="Продвинутый">B</span>
+    <h3>КПД наклонной плоскости</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Груз массой 40 кг втащили на высоту 2 м по наклонной плоскости длиной 5 м, прикладывая силу 200 Н вдоль плоскости. Найди КПД.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="80" data-tol="1%">
+      <label><span class="f-label">КПД:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">%</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>η</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>400</mn><mo>⋅</mo><mn>2</mn></mrow><mrow><mn>200</mn><mo>⋅</mo><mn>5</mn></mrow></mfrac></mstyle><mo>=</mo><mn>80</mn><mi mathvariant="normal">%</mi></mrow><annotation encoding="application/x-tex">\eta = \dfrac{400\cdot 2}{200\cdot 5} = 80\%</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">η</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">200</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">5</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">400</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8056em;vertical-align:-0.0556em;"></span><span class="mord">80%</span></span></span></span>.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 80%.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Простые механизмы. КПД».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>наклонная плоскость</span><span>КПД</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k08" data-level="B">
+  <header class="p-head">
+    <span class="lvl lvl-B" title="Продвинутый">B</span>
+    <h3>Балка на двух опорах</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Однородная балка длиной 4 м и массой 50 кг лежит концами на двух опорах. На расстоянии 1 м от левого конца на балку поставили груз массой 100 кг. Найди силы давления балки на опоры.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="1000" data-tol="1%">
+      <label><span class="f-label">сила давления на левую опору:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div><div class="field" data-type="number" data-value="500" data-tol="1%">
+      <label><span class="f-label">сила давления на правую опору:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p>Относительно левого конца: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mtext>п</mtext></msub><mo>⋅</mo><mn>4</mn><mo>=</mo><mn>500</mn><mo>⋅</mo><mn>2</mn><mo>+</mo><mn>1000</mn><mo>⋅</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">N_п\cdot 4 = 500\cdot 2 + 1000\cdot 1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord cyrillic_fallback mtight">п</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">500</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1000</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mtext>п</mtext></msub><mo>=</mo><mn>500</mn></mrow><annotation encoding="application/x-tex">N_п = 500</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord cyrillic_fallback mtight">п</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">500</span></span></span></span> Н. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mtext>л</mtext></msub><mo>=</mo><mn>1500</mn><mo>−</mo><mn>500</mn><mo>=</mo><mn>1000</mn></mrow><annotation encoding="application/x-tex">N_л = 1500 - 500 = 1000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.109em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord cyrillic_fallback mtight">л</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1500</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">500</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1000</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 1000 Н; 500 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Момент силы. Правило моментов».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>правило моментов</span><span>силы реакции</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k09" data-level="B">
+  <header class="p-head">
+    <span class="lvl lvl-B" title="Продвинутый">B</span>
+    <h3>Брусок на доске</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Однородный брусок шириной 0,4 м и высотой 1 м стоит на доске. Доску медленно наклоняют. При каком угле брусок опрокинется, если он не скользит?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="21.8" data-tol="1%">
+      <label><span class="f-label">угол опрокидывания:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">°</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">tg</mi><mo>⁡</mo><mi>α</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>0,2</mn><mn>0,5</mn></mfrac></mstyle><mo>=</mo><mn>0,4</mn></mrow><annotation encoding="application/x-tex">\operatorname{tg}\alpha = \dfrac{0{,}2}{0{,}5} = 0{,}4</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">5</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">4</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>≈</mo><mn>21,8</mn><mi mathvariant="normal">°</mi></mrow><annotation encoding="application/x-tex">\alpha \approx 21{,}8°</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord">21</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">8°</span></span></span></span>.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 21,8°.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Центр тяжести. Устойчивость».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>опрокидывание</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-k10" data-level="B">
+  <header class="p-head">
+    <span class="lvl lvl-B" title="Продвинутый">B</span>
+    <h3>Лестница</h3>
+    
+    
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Однородная лестница массой 12 кг стоит у гладкой стены под углом 60° к полу. С какой силой лестница давит на стену?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="34.6" data-tol="1%">
+      <label><span class="f-label">сила реакции стены:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>m</mi><mi>g</mi></mrow><mrow><mn>2</mn><mi mathvariant="normal">tg</mi><mo>⁡</mo><mn>60</mn><mi mathvariant="normal">°</mi></mrow></mfrac></mstyle><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>120</mn><mn>3,46</mn></mfrac></mstyle><mo>≈</mo><mn>34,6</mn></mrow><annotation encoding="application/x-tex">N = \dfrac{mg}{2\operatorname{tg} 60°} = \dfrac{120}{3{,}46} \approx 34{,}6</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.988em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">60°</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">3</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">46</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">120</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">34</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">6</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 34,6 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Равновесие твёрдого тела».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>лестница</span><span>силы реакции</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-o1" data-level="C">
+  <header class="p-head">
+    <span class="lvl lvl-C" title="Олимпиада: область">C</span>
+    <h3>Сдвинуть ящик</h3>
+    
+    <span class="badge paid" title="Олимпиадный уровень, в будущем по подписке">олимпиадный</span>
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Ящик массой 30 кг стоит на полу, коэффициент трения 0,75. Какой наименьшей силой можно сдвинуть ящик?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="180" data-tol="1%">
+      <label><span class="f-label">наименьшая сила:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p>Сила направлена под углом трения к горизонту: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>μ</mi><mi>m</mi><mi>g</mi></mrow><msqrt><mrow><mn>1</mn><mo>+</mo><msup><mi>μ</mi><mn>2</mn></msup></mrow></msqrt></mfrac></mstyle><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>225</mn><mn>1,25</mn></mfrac></mstyle><mo>=</mo><mn>180</mn></mrow><annotation encoding="application/x-tex">F = \dfrac{\mu mg}{\sqrt{1 + \mu^2}} = \dfrac{225}{1{,}25} = 180</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2376em;vertical-align:-1.13em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.1522em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9578em;"><span class="svg-align" style="top:-3.2em;"><span class="pstrut" style="height:3.2em;"></span><span class="mord" style="padding-left:1em;"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span><span style="top:-2.9178em;"><span class="pstrut" style="height:3.2em;"></span><span class="hide-tail" style="min-width:1.02em;height:1.28em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.28em" viewBox="0 0 400000 1296" preserveAspectRatio="xMinYMin slice"><path d="M263,681c0.7,0,18,39.7,52,119
+c34,79.3,68.167,158.7,102.5,238c34.3,79.3,51.8,119.3,52.5,120
+c340,-704.7,510.7,-1060.3,512,-1067
+l0 -0
+c4.7,-7.3,11,-11,19,-11
+H40000v40H1012.3
+s-271.3,567,-271.3,567c-38.7,80.7,-84,175,-136,283c-52,108,-89.167,185.3,-111.5,232
+c-22.3,46.7,-33.8,70.3,-34.5,71c-4.7,4.7,-12.3,7,-23,7s-12,-1,-12,-1
+s-109,-253,-109,-253c-72.7,-168,-109.3,-252,-110,-252c-10.7,8,-22,16.7,-34,26
+c-22,17.3,-33.3,26,-34,26s-26,-26,-26,-26s76,-59,76,-59s76,-60,76,-60z
+M1001 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2822em;"><span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.13em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">25</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">225</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">180</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> 180 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Олимпиадная статика». Горизонтально пришлось бы тянуть с силой 225 Н.</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>угол трения</span><span>минимальная сила</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-o2" data-level="C">
+  <header class="p-head">
+    <span class="lvl lvl-C" title="Олимпиада: область">C</span>
+    <h3>Три кирпича</h3>
+    
+    <span class="badge paid" title="Олимпиадный уровень, в будущем по подписке">олимпиадный</span>
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Три одинаковых кирпича длиной 20 см кладут стопкой на край стола так, чтобы верхний выступал за край как можно дальше. Найди наибольший вылет.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="18.3" data-tol="1%">
+      <label><span class="f-label">вылет:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">см</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi><mo>=</mo><mn>10</mn><mo>⋅</mo><mrow><mo fence="true">(</mo><mn>1</mn><mo>+</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>1</mn><mn>2</mn></mfrac></mstyle><mo>+</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>1</mn><mn>3</mn></mfrac></mstyle><mo fence="true">)</mo></mrow><mo>≈</mo><mn>18,3</mn></mrow><annotation encoding="application/x-tex">d = 10\cdot\left(1 + \dfrac12 + \dfrac13\right) \approx 18{,}3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">10</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.4em;vertical-align:-0.95em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">3</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">18</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">3</span></span></span></span> см.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 18,3 см.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Олимпиадная статика».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>центр тяжести</span><span>рекуррентное построение</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-o3" data-level="C">
+  <header class="p-head">
+    <span class="lvl lvl-C" title="Олимпиада: область">C</span>
+    <h3>Колесо на бордюр</h3>
+    
+    <span class="badge paid" title="Олимпиадный уровень, в будущем по подписке">олимпиадный</span>
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Колесо радиусом 0,4 м и массой 40 кг нужно закатить на бордюр высотой 0,1 м горизонтальной силой, приложенной к оси. Какая для этого нужна сила?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="353" data-tol="1%">
+      <label><span class="f-label">горизонтальная сила:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p>Моменты относительно ребра бордюра: горизонтальное расстояние до оси <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msqrt><mrow><mn>0,16</mn><mo>−</mo><mn>0,09</mn></mrow></msqrt><mo>≈</mo><mn>0,265</mn></mrow><annotation encoding="application/x-tex">\sqrt{0{,}16 - 0{,}09} \approx 0{,}265</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.04em;vertical-align:-0.23em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.81em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">16</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">09</span></span></span><span style="top:-2.77em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.23em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">265</span></span></span></span> м, высота оси над ребром <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0,3</mn></mrow><annotation encoding="application/x-tex">0{,}3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">3</span></span></span></span> м. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>400</mn><mo>⋅</mo><mn>0,265</mn></mrow><mn>0,3</mn></mfrac></mstyle><mo>≈</mo><mn>353</mn></mrow><annotation encoding="application/x-tex">F = \dfrac{400\cdot 0{,}265}{0{,}3} \approx 353</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">3</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">400</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">265</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">353</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 353 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Тема: «Равновесие твёрдого тела».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>правило моментов</span><span>опрокидывание</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-o4" data-level="D">
+  <header class="p-head">
+    <span class="lvl lvl-D" title="Олимпиада: республика">D</span>
+    <h3>Лестница: пол и стена шероховатые</h3>
+    
+    <span class="badge paid" title="Олимпиадный уровень, в будущем по подписке">олимпиадный</span>
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Коэффициенты трения лестницы о пол и о стену равны 0,4. При каком наименьшем угле с полом однородная лестница может стоять?</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="46.4" data-tol="1%">
+      <label><span class="f-label">наименьший угол с полом:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">°</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    
+    <section class="step solution" hidden><h4>Решение</h4><p>В предельном случае оба трения максимальны: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">tg</mi><mo>⁡</mo><mi>α</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>1</mn><mo>−</mo><msup><mi>μ</mi><mn>2</mn></msup></mrow><mrow><mn>2</mn><mi>μ</mi></mrow></mfrac></mstyle><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mn>0,84</mn><mn>0,8</mn></mfrac></mstyle><mo>=</mo><mn>1,05</mn></mrow><annotation encoding="application/x-tex">\operatorname{tg}\alpha = \dfrac{1 - \mu^2}{2\mu} = \dfrac{0{,}84}{0{,}8} = 1{,}05</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">tg</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.3715em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4911em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mord mathnormal">μ</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">μ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">8</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">84</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">05</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>≈</mo><mn>46,4</mn><mi mathvariant="normal">°</mi></mrow><annotation encoding="application/x-tex">\alpha \approx 46{,}4°</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord">46</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">4°</span></span></span></span>.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 46,4°.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Темы: «Равновесие твёрдого тела» и «Олимпиадная статика».</p>
+</div>
+    </section>
+    <div class="step-btns">
+      
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>лестница</span><span>предельное равновесие</span></footer>
+</article>
+
+<article class="problem" id="mech-stat-07-o5" data-level="D">
+  <header class="p-head">
+    <span class="lvl lvl-D" title="Олимпиада: республика">D</span>
+    <h3>Дифференциальный блок</h3>
+    
+    <span class="badge paid" title="Олимпиадный уровень, в будущем по подписке">олимпиадный</span>
+    
+  </header>
+  <div class="qa">
+  <div class="p-cond"><p>Дифференциальный блок: на одной оси жёстко скреплены два блока радиусами 12 см и 10 см. Бесконечная цепь охватывает большой блок, опускается петлёй, в которой висит подвижный блок с грузом массой 200 кг, и поднимается на малый блок. Свободную ветвь цепи тянут вниз с большого блока. Какая нужна сила? Трением пренебречь.</p>
+</div>
+  <form class="p-check">
+    <div class="field" data-type="number" data-value="167" data-tol="1%">
+      <label><span class="f-label">сила:</span> <input type="text" inputmode="decimal" placeholder="число" autocomplete="off"></label><span class="unit">Н</span><span class="mark" aria-live="polite"></span>
+    </div>
+    <div class="check-row"><button type="submit">Проверить</button><span class="verdict" aria-live="polite"></span></div>
+  </form>
+  <div class="p-steps">
+    <section class="step hint" hidden><h4>Подсказка 1</h4><p>Поверни верхние блоки на малый угол <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>δ</mi><mi>φ</mi></mrow><annotation encoding="application/x-tex">\delta\varphi</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal">φ</span></span></span></span>. На сколько поднимется груз и на сколько переместится рука?</p>
+</section>
+    <section class="step solution" hidden><h4>Решение</h4><p>С большого блока петля укорачивается на <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mtext> </mtext><mi>δ</mi><mi>φ</mi></mrow><annotation encoding="application/x-tex">R\,\delta\varphi</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal">φ</span></span></span></span>, с малого удлиняется на <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mtext> </mtext><mi>δ</mi><mi>φ</mi></mrow><annotation encoding="application/x-tex">r\,\delta\varphi</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal">φ</span></span></span></span>, груз поднимается на <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mo stretchy="false">(</mo><mi>R</mi><mo>−</mo><mi>r</mi><mo stretchy="false">)</mo><mi>δ</mi><mi>φ</mi></mrow><mn>2</mn></mfrac></mstyle></mrow><annotation encoding="application/x-tex">\dfrac{(R - r)\delta\varphi}{2}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:2.113em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mclose">)</span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal">φ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>. Рука проходит <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mtext> </mtext><mi>δ</mi><mi>φ</mi></mrow><annotation encoding="application/x-tex">R\,\delta\varphi</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0379em;">δ</span><span class="mord mathnormal">φ</span></span></span></span>. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>⋅</mo><mi>R</mi><mo>=</mo><mi>P</mi><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mi>R</mi><mo>−</mo><mi>r</mi></mrow><mn>2</mn></mfrac></mstyle></mrow><annotation encoding="application/x-tex">F\cdot R = P\dfrac{R - r}{2}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.0463em;vertical-align:-0.686em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mstyle scriptlevel="0" displaystyle="true"><mfrac><mrow><mn>2000</mn><mo>⋅</mo><mn>0,02</mn></mrow><mn>0,24</mn></mfrac></mstyle><mo>≈</mo><mn>167</mn></mrow><annotation encoding="application/x-tex">F = \dfrac{2000\cdot 0{,}02}{0{,}24} \approx 167</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2019em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">24</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2000</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">0</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">02</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">167</span></span></span></span> Н.</p>
+
+      <div class="final"><p><strong>Ответ:</strong> ≈ 167 Н.</p>
+</div>
+      <div class="coach"><p><strong>Комментарий тренера.</strong> Темы: «Простые механизмы» и «Олимпиадная статика». Реальные дифференциальные блоки держат груз и без руки: трения хватает для самоторможения.</p>
+</div>
+    </section>
+    <div class="step-btns">
+      <button type="button" class="next-hint">Подсказка 1</button>
+      <button type="button" class="show-solution">Показать решение</button>
+    </div>
+  </div>
+</div>
+  <footer class="tags"><span>итоговая</span><span>золотое правило</span><span>возможные перемещения</span></footer>
+</article>
+</section>
+<nav class="pager">
+  <a class="prev" href="../06-statics-olympiad/index.html">← Олимпиадные задачи по статике</a>
+  <a class="next" href="../../06-rigid-body/01-rotation-kinematics/index.html">Кинематика вращения твёрдого тела →</a>
+</nav></main>
+</div>
+<script src="../../../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Свободное падение</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .graphs { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Свободное падение</h1>
+  <p class="lead">Мяч бросают вертикально. Серые точки — «стробоскоп»: положения мяча через каждые 0,2 с.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Начальная скорость v₀ (+ вверх):<span id="v0o"></span><input id="v0" type="range" min="-10" max="25" step="0.5" value="15"></label>
+      <label>Начальная высота h₀:<span id="h0o"></span><input id="h0" type="range" min="0" max="40" step="1" value="0"></label>
+    </div>
+    <div class="row">
+      <div class="seg" id="planet">
+        <button data-g="9.8" class="on">Земля</button><button data-g="3.71">Марс</button><button data-g="1.62">Луна</button>
+      </div>
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card"><div class="readout" id="read"></div></div>
+
+  <div class="graphs">
+    <div class="card"><canvas id="scene" height="300"></canvas></div>
+    <div class="card"><canvas id="gy" height="300"></canvas></div>
+    <div class="card"><canvas id="gv" height="300"></canvas></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Брось мяч вверх со скоростью 15 м/с. Сравни время подъёма и время спуска до точки броска.</li>
+      <li>Посмотри на «стробоскоп». Где точки гуще, а где реже? Почему?</li>
+      <li>Переключи планету на Луну. Во сколько раз выросла наибольшая высота?</li>
+      <li>Найди на графике скорости момент, когда мяч в верхней точке. Чему равен наклон графика в этот момент?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let g = 9.8, t = 0, running = false, last = null;
+const v0 = () => +$('v0').value, h0 = () => +$('h0').value;
+const Y = tt => h0() + v0() * tt - g * tt * tt / 2, V = tt => v0() - g * tt;
+// время полёта до земли (y = 0)
+const Tf = () => { const a = g / 2, b = -v0(), c = -h0(); const D = b * b - 4 * a * c; return Math.max(0, (-b + Math.sqrt(D)) / (2 * a)); };
+const Hmax = () => v0() > 0 ? h0() + v0() * v0() / (2 * g) : h0();
+
+function setup(c) {
+  const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const gg = c.getContext('2d'); gg.setTransform(r, 0, 0, r, 0, 0); return [gg, W, H];
+}
+const niceMax = x => { const s = [5, 10, 20, 25, 50, 100, 200, 400, 500]; return s.find(v => v >= x) || Math.ceil(x / 100) * 100; };
+const niceStep = x => x <= 5 ? 1 : x <= 10 ? 2 : x <= 25 ? 5 : x <= 50 ? 10 : x <= 100 ? 20 : 100;
+
+function axes(gg, W, H, x1, y0, y1, xs, ys, name, unit) {
+  const L = 38, R = 8, Tp = 22, B = 26;
+  const sx = x => L + x / x1 * (W - L - R), sy = y => Tp + (y1 - y) / (y1 - y0) * (H - Tp - B);
+  gg.strokeStyle = '#ecece6'; gg.lineWidth = 1; gg.fillStyle = '#6b6b70'; gg.font = '11px system-ui'; gg.textAlign = 'right';
+  for (let y = Math.ceil(y0 / ys) * ys; y <= y1 + 1e-9; y += ys) { gg.beginPath(); gg.moveTo(L, sy(y)); gg.lineTo(W - R, sy(y)); gg.stroke(); gg.fillText(fmt(y, 1), L - 4, sy(y) + 4); }
+  gg.textAlign = 'center';
+  for (let x = 0; x <= x1 + 1e-9; x += xs) { gg.beginPath(); gg.moveTo(sx(x), Tp); gg.lineTo(sx(x), H - B); gg.stroke(); gg.fillText(fmt(x, 1), sx(x), H - B + 14); }
+  gg.strokeStyle = '#999'; gg.beginPath(); gg.moveTo(L, sy(0)); gg.lineTo(W - R, sy(0)); gg.stroke();
+  gg.fillStyle = '#1d1d1f'; gg.font = '600 13px system-ui'; gg.textAlign = 'left'; gg.fillText(`${name}, ${unit}`, L, 14);
+  gg.font = '11px system-ui'; gg.textAlign = 'right'; gg.fillText('t, с', W - R, H - 3);
+  return { sx, sy };
+}
+
+function draw() {
+  const T = Tf(), HM = Hmax(), ymax = niceMax(Math.max(HM, 5)), tmax = Math.max(1, Math.ceil(T));
+  const vmax = niceMax(Math.max(Math.abs(v0()), Math.abs(V(T)), 5));
+  // сцена
+  { const [gg, W, H] = setup($('scene')), Tp = 14, B = 20, sy = y => Tp + (ymax - y) / ymax * (H - Tp - B), cx = W * .55;
+    gg.fillStyle = '#eef3f8'; gg.fillRect(0, 0, W, sy(0)); gg.fillStyle = '#d9d6cc'; gg.fillRect(0, sy(0), W, H - sy(0));
+    gg.fillStyle = '#6b6b70'; gg.font = '11px system-ui'; gg.textAlign = 'left';
+    const st = niceStep(ymax);
+    for (let y = 0; y <= ymax; y += st) { gg.fillRect(4, sy(y), 8, 1); gg.fillText(y + ' м', 14, sy(y) + 4); }
+    if (h0() > 0) { gg.fillStyle = '#b8b2a3'; gg.fillRect(cx - 40, sy(h0()), 26, sy(0) - sy(h0())); }
+    gg.fillStyle = 'rgba(0,0,0,.22)';
+    for (let k = 0; k * 0.2 <= t + 1e-9; k++) { gg.beginPath(); gg.arc(cx, sy(Y(k * 0.2)), 4, 0, 7); gg.fill(); }
+    if (v0() > 0) { gg.strokeStyle = '#dc2626'; gg.setLineDash([4, 4]); gg.beginPath(); gg.moveTo(cx - 30, sy(HM)); gg.lineTo(cx + 30, sy(HM)); gg.stroke(); gg.setLineDash([]); }
+    gg.fillStyle = '#dc2626'; gg.beginPath(); gg.arc(cx, sy(Math.max(0, Y(t))), 8, 0, 7); gg.fill();
+    // вектор скорости
+    const v = V(t), len = v / vmax * 60; if (Math.abs(len) > 3) { gg.strokeStyle = gg.fillStyle = '#2563eb'; gg.lineWidth = 2.5;
+      const y = sy(Math.max(0, Y(t))), x = cx + 18; gg.beginPath(); gg.moveTo(x, y); gg.lineTo(x, y - len); gg.stroke();
+      gg.beginPath(); gg.moveTo(x, y - len - Math.sign(len) * 6); gg.lineTo(x - 5, y - len); gg.lineTo(x + 5, y - len); gg.fill();
+      gg.font = 'italic 14px serif'; gg.fillText('v', x + 8, y - len / 2); }
+  }
+  const plot = (id, f, y0, y1, name, unit, col) => {
+    const [gg, W, H] = setup($(id)), a = axes(gg, W, H, tmax, y0, y1, tmax <= 3 ? .5 : niceStep(tmax), niceStep(y1 - y0), name, unit);
+    const line = (t1, alpha, w) => { gg.strokeStyle = col; gg.globalAlpha = alpha; gg.lineWidth = w; gg.beginPath();
+      for (let i = 0; i <= 200; i++) { const tt = t1 * i / 200; i ? gg.lineTo(a.sx(tt), a.sy(f(tt))) : gg.moveTo(a.sx(tt), a.sy(f(tt))); } gg.stroke(); gg.globalAlpha = 1; };
+    line(T, .2, 2); line(Math.min(t, T), 1, 3);
+    gg.fillStyle = col; gg.beginPath(); gg.arc(a.sx(Math.min(t, T)), a.sy(f(Math.min(t, T))), 5, 0, 7); gg.fill();
+  };
+  plot('gy', Y, 0, ymax, 'y', 'м', '#dc2626');
+  plot('gv', V, -vmax, vmax, 'vᵧ', 'м/с', '#2563eb');
+
+  $('v0o').textContent = fmt(v0(), 1) + ' м/с'; $('h0o').textContent = fmt(h0(), 0) + ' м';
+  $('read').innerHTML = ro('время t', fmt(t) + ' с') + ro('высота y', fmt(Math.max(0, Y(t))) + ' м') + ro('скорость vᵧ', fmt(V(Math.min(t, T))) + ' м/с') +
+    ro('наибольшая высота', fmt(HM) + ' м') + ro('время полёта', fmt(T) + ' с') + ro('ускорение g', fmt(g) + ' м/с²');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const T = Tf();
+  if (last !== null) t = Math.min(T, t + (ts - last) / 1000);
+  last = ts; draw();
+  if (t >= T) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= Tf()) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('planet').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('planet').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); g = +b.dataset.g; reset();
+});
+['v0', 'h0'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

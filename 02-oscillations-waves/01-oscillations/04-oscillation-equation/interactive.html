@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор колебательных систем</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 12px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  .formula { font-family:"Cambria Math","Times New Roman",serif; font-size:1.1rem; margin:8px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Конструктор колебательных систем</h1>
+  <p class="lead">Четыре разные системы, одно уравнение ẍ = −ω²x. Выбери систему, меняй параметры и сравни период с формулой. Все колебания малые, трения нет.</p>
+
+  <div class="card">
+    <div class="seg" id="sys"><button data-s="u" class="on">U-трубка</button><button data-s="float">Плавающий брусок</button><button data-s="bowl">Тело в чаше</button><button data-s="spr">Две пружины</button></div>
+    <div class="controls">
+      <label><i id="l1"></i><span id="o1"></span><input id="p1" type="range"></label>
+      <label><i id="l2"></i><span id="o2"></span><input id="p2" type="range"></label>
+    </div>
+    <p class="formula" id="formula"></p>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Выбери U-трубку и меняй длину столба. Влияет ли на период плотность жидкости?</li>
+      <li>Выбери плавающий брусок и меняй его плотность. Почему меняется период, хотя размеры бруска те же?</li>
+      <li>В чаше сравни бусинку, шар, цилиндр и обруч. Во сколько раз различаются периоды бусинки и обруча?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const BODIES = [['бусинка (скользит)', 0], ['шар', 0.4], ['цилиндр', 0.5], ['обруч', 1]];
+const SYS = {
+  u: { p: [['Длина столба жидкости L', 0.2, 2, 0.05, 0.5, v => fmt(v) + ' м'], ['Плотность жидкости', 500, 13600, 100, 1000, v => v + ' кг/м³']],
+       w2: (a) => 2 * G / a, f: 'ω² = 2g / L — плотность сокращается' },
+  float: { p: [['Высота бруска H', 0.05, 0.5, 0.01, 0.2, v => fmt(v) + ' м'], ['Плотность бруска', 200, 950, 10, 600, v => v + ' кг/м³']],
+       w2: (a, b) => G / (a * b / 1000), f: 'ω² = g / h, где h = (ρ_т / ρ_в)·H — глубина погружения' },
+  bowl: { p: [['Радиус чаши R', 0.2, 2, 0.05, 0.6, v => fmt(v) + ' м'], ['Тело', 0, 3, 1, 2, v => BODIES[v][0]]],
+       w2: (a, b) => G / ((1 + BODIES[b][1]) * a), f: 'ω² = g / ((1 + k)·R), k = I / (mr²)' },
+  spr: { p: [['Жёсткость левой пружины k₁', 10, 100, 5, 30, v => v + ' Н/м'], ['Жёсткость правой пружины k₂', 10, 100, 5, 70, v => v + ' Н/м']],
+       w2: (a, b) => (a + b) / 0.25, f: 'ω² = (k₁ + k₂) / m, m = 0,25 кг' } };
+let sys = 'u', t = 0, last = null, vals = {};
+
+function setSys(s) {
+  if (sys) vals[sys] = [+$('p1').value, +$('p2').value];
+  sys = s; const S = SYS[s];
+  S.p.forEach(([lab, mn, mx, st, def], i) => { const el = $('p' + (i + 1)); el.min = mn; el.max = mx; el.step = st; el.value = vals[s] ? vals[s][i] : def; $('l' + (i + 1)).textContent = lab; });
+  $('formula').textContent = S.f; draw();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = SYS[sys], a = +$('p1').value, b = +$('p2').value, w = Math.sqrt(S.w2(a, b)), T = 2 * Math.PI / w, x = Math.cos(w * t);   // x — доля амплитуды
+  const sw = Math.min(W * 0.55, 420), cx = sw / 2;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2;
+  if (sys === 'u') {
+    const tw = 30, base = H - 40, lev = 150, d = x * 40, gap = 120;
+    g.fillStyle = b > 5000 ? '#9ca3af' : '#93c5fd';
+    g.fillRect(cx - gap / 2 - tw, lev - d, tw, base - lev + d); g.fillRect(cx + gap / 2, lev + d, tw, base - lev - d); g.fillRect(cx - gap / 2 - tw, base, gap + 2 * tw, tw * 0.8);
+    g.beginPath(); g.moveTo(cx - gap / 2 - tw, 40); g.lineTo(cx - gap / 2 - tw, base + tw * 0.8); g.lineTo(cx + gap / 2 + tw, base + tw * 0.8); g.lineTo(cx + gap / 2 + tw, 40);
+    g.moveTo(cx - gap / 2, 40); g.lineTo(cx - gap / 2, base); g.lineTo(cx + gap / 2, base); g.lineTo(cx + gap / 2, 40); g.stroke();
+  } else if (sys === 'float') {
+    const wl = 150, k = 260, hb = a * k, sub = a * b / 1000 * k, d = x * Math.min(20, sub * 0.4), top = wl - (hb - sub) + d;
+    g.fillStyle = '#bfdbfe'; g.fillRect(20, wl, sw - 40, H - wl - 20);
+    g.fillStyle = '#c8a96a'; g.fillRect(cx - 40, top, 80, hb); g.strokeRect(cx - 40, top, 80, hb);
+    g.strokeStyle = '#2563eb'; g.beginPath(); g.moveTo(20, wl); g.lineTo(sw - 20, wl); g.stroke();
+  } else if (sys === 'bowl') {
+    const R = Math.min(sw / 2 - 20, 260) * Math.min(1, a / 1.2 + 0.3), cy = H - 30 - R, amp = 0.35, ang = x * amp, r = 12;
+    g.beginPath(); g.arc(cx, cy, R, Math.PI * 0.15, Math.PI * 0.85); g.stroke();
+    const bx = cx + (R - r) * Math.sin(ang), by = cy + (R - r) * Math.cos(ang);
+    g.fillStyle = BODIES[b][1] === 1 ? '#fff' : '#dc2626'; g.lineWidth = BODIES[b][1] === 1 ? 4 : 2; g.strokeStyle = '#dc2626';
+    g.beginPath(); g.arc(bx, by, r, 0, 7); g.fill(); g.stroke();
+    if (BODIES[b][1] > 0) { const spin = -(R - r) / r * ang; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + r * Math.sin(spin), by - r * Math.cos(spin)); g.stroke(); }
+  } else {
+    const y = 150, L = sw - 60, bx = cx + x * 50, bw = 50;
+    g.fillStyle = '#d9d6cc'; g.fillRect(14, y - 50, 16, 80); g.fillRect(sw - 30, y - 50, 16, 80); g.fillRect(14, y + 30, sw - 28, 8);
+    const spring = (x1, x2, kk) => { g.strokeStyle = '#475569'; g.lineWidth = 1 + kk / 40; g.beginPath(); g.moveTo(x1, y); const n = 16; for (let i = 1; i < n; i++) g.lineTo(x1 + (x2 - x1) * i / n, y + (i % 2 ? -10 : 10)); g.lineTo(x2, y); g.stroke(); };
+    spring(30, bx - bw / 2, a); spring(bx + bw / 2, sw - 30, b);
+    g.fillStyle = '#2563eb'; g.fillRect(bx - bw / 2, y - 20, bw, 50);
+  }
+  // график
+  const gx = sw + 30, gw = W - gx - 16, gy = 30, gh = H - 70;
+  if (gw > 80) {
+    const span = 3 * T, X = q => gx + gw * q / span, Y = v => gy + gh / 2 - v * (gh / 2 - 6);
+    g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy + gh / 2); g.lineTo(gx + gw, gy + gh / 2); g.stroke();
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath(); for (let j = 0; j <= 300; j++) { const q = span * j / 300; j ? g.lineTo(X(q), Y(Math.cos(w * q))) : g.moveTo(X(q), Y(1)); } g.stroke();
+    const tm = t % span; g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(tm), Y(Math.cos(w * tm)), 4, 0, 7); g.fill();
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('x / A, окно — три периода', gx + 4, gy - 8);
+  }
+  $('o1').textContent = SYS[sys].p[0][5](a); $('o2').textContent = SYS[sys].p[1][5](b);
+  $('read').innerHTML = ro('ω²', fmt(w * w) + ' 1/с²') + ro('ω', fmt(w) + ' рад/с') + ro('период T', fmt(T) + ' с') + ro('частота', fmt(1 / T) + ' Гц');
+}
+
+function tick(ts) { const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('sys').querySelectorAll('button').forEach(bt => bt.onclick = () => { $('sys').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === bt)); setSys(bt.dataset.s); });
+['p1', 'p2'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+sys = null; setSys('u'); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Брусок и динамометр</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .fr { color:#dc2626; } .ft { color:#2563eb; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #ramp { min-width: 13em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Брусок и динамометр</h1>
+  <p class="lead">Тяни брусок динамометром и следи за <b class="fr">силой трения</b>. Пока брусок стоит, трение покоя равно силе тяги.
+    Сдвинуть труднее, чем тащить: μ₀ больше μ.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Сила тяги F:<span id="Fo"></span><input id="F" type="range" min="0" max="30" step="0.5" value="0"></label>
+      <label>Масса бруска m:<span id="mo"></span><input id="m" type="range" min="1" max="5" step="0.5" value="2"></label>
+      <label>Трение покоя μ₀:<span id="m0o"></span><input id="m0" type="range" min="0.1" max="0.8" step="0.05" value="0.5"></label>
+      <label>Трение скольжения μ:<span id="mko"></span><input id="mk" type="range" min="0.1" max="0.8" step="0.05" value="0.35"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="ramp">▶ Плавно тянуть</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="scene" height="130"></canvas>
+    <canvas id="g" height="240"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Нажми «Плавно тянуть». Как меняется сила трения, пока брусок стоит? При какой силе он трогается?</li>
+      <li>Почему после начала движения сила трения скачком уменьшается?</li>
+      <li>Увеличь массу бруска вдвое. Во сколько раз выросла сила, нужная, чтобы сдвинуть его?</li>
+      <li>Когда брусок едет, уменьши силу тяги ползунком. Что происходит с бруском?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, TMAX = 8;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, x = 0, v = 0, moving = false, hist = [], ramping = false, last = null, loop = false;
+const P = () => ({ F: +$('F').value, m: +$('m').value, m0: Math.max(+$('m0').value, +$('mk').value), mk: +$('mk').value });
+
+function friction(p) {                      // сила трения (проекция против оси движения — положительное число означает «назад»)
+  const N = p.m * G;
+  if (!moving) return Math.min(p.F, p.m0 * N);
+  return p.mk * N;
+}
+function step(h) {
+  const p = P(), N = p.m * G;
+  if (!moving && p.F > p.m0 * N) moving = true;
+  if (moving) { const a = (p.F - p.mk * N) / p.m; v += a * h; if (v <= 0) { v = 0; moving = p.F > p.m0 * N; } x += v * h; }
+}
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+
+function draw() {
+  const p = P(), Ftr = friction(p), N = p.m * G;
+  { const [g, W, H] = setup($('scene')), gy = H - 30, bx = 40 + ((x * 60) % (W - 220)), bw = 50 + p.m * 8, bh = 40;
+    g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, W, H - gy);
+    g.fillStyle = '#b45309'; g.fillRect(bx, gy - bh, bw, bh);
+    // динамометр
+    const dx = bx + bw, len = 40 + p.F * 3; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(dx, gy - bh / 2); g.lineTo(dx + 10, gy - bh / 2); g.stroke();
+    g.fillStyle = '#e5e7eb'; g.fillRect(dx + 10, gy - bh / 2 - 7, len, 14); g.strokeRect(dx + 10, gy - bh / 2 - 7, len, 14);
+    g.fillStyle = '#1d1d1f'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(p.F) + ' Н', dx + 10 + len / 2, gy - bh / 2 + 4);
+    // стрелки: тяга и трение
+    const arrow = (x1, x2, y, col, lab) => { if (Math.abs(x2 - x1) < 3) return; const d = Math.sign(x2 - x1);
+      g.strokeStyle = g.fillStyle = col; g.lineWidth = 3; g.beginPath(); g.moveTo(x1, y); g.lineTo(x2 - d * 8, y); g.stroke();
+      g.beginPath(); g.moveTo(x2, y); g.lineTo(x2 - d * 12, y - 6); g.lineTo(x2 - d * 12, y + 6); g.fill();
+      g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, (x1 + x2) / 2, y - 8); };
+    arrow(bx + bw / 2, bx + bw / 2 + p.F * 4, gy - bh - 14, '#2563eb', 'F');
+    arrow(bx + bw / 2, bx + bw / 2 - Ftr * 4, gy + 14, '#dc2626', 'Fтр');
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(moving ? 'брусок скользит' : 'брусок покоится', 10, 18);
+  }
+  { const [g, W, H] = setup($('g')), L = 40, R = 10, Tp = 22, B = 26, FM = 30;
+    const sx = tt => L + tt / TMAX * (W - L - R), sy = f => H - B - f / FM * (H - Tp - B);
+    g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let f = 0; f <= FM; f += 5) { g.beginPath(); g.moveTo(L, sy(f)); g.lineTo(W - R, sy(f)); g.stroke(); g.fillText(f, L - 4, sy(f) + 4); }
+    g.textAlign = 'center'; for (let tt = 0; tt <= TMAX; tt += 1) g.fillText(tt, sx(tt), H - 8);
+    g.strokeStyle = '#b45309'; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(L, sy(p.m0 * N)); g.lineTo(W - R, sy(p.m0 * N)); g.stroke();
+    g.beginPath(); g.moveTo(L, sy(p.mk * N)); g.lineTo(W - R, sy(p.mk * N)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#b45309'; g.textAlign = 'left'; g.fillText('μ₀N', W - R - 30, sy(p.m0 * N) - 4); g.fillText('μN', W - R - 30, sy(p.mk * N) + 12);
+    for (const [key, col] of [['F', '#2563eb'], ['Ftr', '#dc2626']]) { g.strokeStyle = col; g.lineWidth = 2.5; g.beginPath();
+      hist.forEach((h, i) => i ? g.lineTo(sx(h.t), sy(h[key])) : g.moveTo(sx(h.t), sy(h[key]))); g.stroke(); }
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('силы, Н', L, 14); g.textAlign = 'right'; g.font = '11px system-ui'; g.fillText('t, с', W - R, H - 8);
+  }
+  $('Fo').textContent = fmt(p.F) + ' Н'; $('mo').textContent = fmt(p.m) + ' кг'; $('m0o').textContent = fmt(p.m0, 2); $('mko').textContent = fmt(p.mk, 2);
+  $('read').innerHTML = ro('сила тяги F', fmt(p.F) + ' Н', 'ft') + ro('сила трения', fmt(Ftr) + ' Н', 'fr') + ro('предел трения покоя μ₀N', fmt(p.m0 * N) + ' Н') +
+    ro('ускорение', fmt(moving ? (p.F - p.mk * N) / p.m : 0, 2) + ' м/с²') + ro('скорость', fmt(v, 2) + ' м/с');
+}
+
+function tick(ts) {
+  if (!loop) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000);
+    if (ramping) { const nf = Math.min(30, +$('F').value + 3 * dt); $('F').value = nf; if (nf >= 30) { ramping = false; $('ramp').textContent = '▶ Плавно тянуть'; } }
+    for (let i = 0; i < 10; i++) step(dt / 10); t += dt; hist.push({ t, F: +$('F').value, Ftr: friction(P()) }); }
+  last = ts; draw();
+  if (t >= TMAX) { loop = false; ramping = false; $('ramp').textContent = '▶ Плавно тянуть'; return; }
+  requestAnimationFrame(tick);
+}
+function start() { if (!loop) { loop = true; last = null; requestAnimationFrame(tick); } }
+function reset() { loop = false; ramping = false; t = 0; x = 0; v = 0; moving = false; hist = []; $('F').value = 0; $('ramp').textContent = '▶ Плавно тянуть'; draw(); }
+$('ramp').onclick = () => { if (t >= TMAX) reset(); ramping = !ramping; $('ramp').textContent = ramping ? '⏸ Остановить рост' : '▶ Плавно тянуть'; start(); };
+$('reset').onclick = reset;
+$('F').oninput = () => { if (t >= TMAX) reset(); start(); draw(); };
+['m', 'm0', 'mk'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

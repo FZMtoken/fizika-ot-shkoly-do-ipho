@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вынужденные колебания и резонанс</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Вынужденные колебания и резонанс</h1>
+  <p class="lead">Груз массой 1 кг на пружине раскачивает сила F₀cos Ωt с F₀ = 1 Н. Слева — смещение (синее) и сила (пунктир) во времени, справа — резонансная кривая: установившаяся амплитуда в зависимости от частоты силы.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Частота силы Ω</i><span id="Oo"></span><input id="O" type="range" min="0.5" max="15" step="0.1" value="3"></label>
+      <label><i>Собственная частота ω₀</i><span id="wo"></span><input id="w" type="range" min="2" max="10" step="0.5" value="5"></label>
+      <label><i>Затухание β</i><span id="bo"></span><input id="b" type="range" min="0.05" max="2" step="0.05" value="0.25"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сначала</button><button id="def">Исходные значения</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь Ω = 1 рад/с. Совпадает ли амплитуда с F₀/k? Идут ли сила и смещение в фазе?</li>
+      <li>Поставь Ω = ω₀ и нажми «Сначала». За сколько секунд амплитуда почти вышла на максимум? Сравни с 1/β.</li>
+      <li>Сделай Ω вдвое больше ω₀. В какой фазе теперь груз и сила? Уменьши β вдвое: как изменились высота и ширина пика?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const F0 = 1, WIN = 10, OMAX = 15;                       // m = 1 кг, окно графика 10 с
+const IDS = ['O', 'w', 'b'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let t = 0, x = 0, v = 0, hist = [], running = true, last = null;
+
+const par = () => ({ O: +$('O').value, w: +$('w').value, b: +$('b').value });
+const amp = (O, p) => F0 / Math.sqrt((p.w ** 2 - O ** 2) ** 2 + 4 * p.b ** 2 * O ** 2);
+function reset() { t = 0; x = 0; v = 0; hist = [[0, 0]]; draw(); }
+function step(dt) {
+  const p = par(), n = 20, h = dt / n, acc = (q, u, s) => -p.w * p.w * q - 2 * p.b * u + F0 * Math.cos(p.O * s);
+  for (let i = 0; i < n; i++) {                                                    // Рунге — Кутта 4
+    const a1 = acc(x, v, t), a2 = acc(x + h / 2 * v, v + h / 2 * a1, t + h / 2), a3 = acc(x + h / 2 * (v + h / 2 * a1), v + h / 2 * a2, t + h / 2), a4 = acc(x + h * (v + h / 2 * a2), v + h * a3, t + h);
+    x += h * (v + h / 6 * (a1 + a2 + a3)); v += h / 6 * (a1 + 2 * a2 + 2 * a3 + a4); t += h;
+  }
+  hist.push([t, x]); while (hist.length && hist[0][0] < t - WIN) hist.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), Ath = amp(p.O, p), Ares = amp(Math.sqrt(Math.max(p.w ** 2 - 2 * p.b ** 2, 0.01)), p);
+  const meas = hist.filter(([q]) => q > t - 2 * Math.PI / p.O).reduce((m, [, q]) => Math.max(m, Math.abs(q)), 0);
+  const ymax = Math.max(Ath, ...hist.map(([, q]) => Math.abs(q)), 1e-3) * 1.15;
+  // груз на пружине с силой
+  const x0 = 24, top = 54, sw = W - 2 * x0, eq = x0 + sw / 2, sc = sw * 0.3 / ymax;
+  g.fillStyle = '#d9d6cc'; g.fillRect(x0 - 12, top - 34, 12, 46); g.fillRect(x0 - 12, top + 12, sw + 12, 6);
+  const bx = eq + x * sc, bw = 32, coils = 14;
+  g.strokeStyle = '#475569'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, top - 4);
+  for (let i = 1; i < coils * 2; i++) g.lineTo(x0 + (bx - bw / 2 - x0) * i / (coils * 2), top - 4 + (i % 2 ? -8 : 8));
+  g.lineTo(bx - bw / 2, top - 4); g.stroke();
+  g.fillStyle = '#2563eb'; g.fillRect(bx - bw / 2, top - 20, bw, 32);
+  const F = Math.cos(p.O * t), fl = 50 * F;                                       // стрелка силы
+  if (Math.abs(fl) > 3) { const fx = bx + Math.sign(fl) * bw / 2, y = top - 4; g.strokeStyle = g.fillStyle = '#dc2626'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(fx, y); g.lineTo(fx + fl, y); g.stroke();
+    g.beginPath(); g.moveTo(fx + fl, y); g.lineTo(fx + fl - Math.sign(fl) * 8, y - 5); g.lineTo(fx + fl - Math.sign(fl) * 8, y + 5); g.fill(); }
+  // график во времени
+  const gy = 96, gh = H - gy - 26, split = W < 560 ? sw * 0.5 : sw * 0.56, gw = split - 12;
+  const Xt = q => x0 + gw * (q - Math.max(0, t - WIN)) / WIN, Yt = q => gy + gh / 2 - q / ymax * (gh / 2 - 4);
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.strokeRect(x0, gy, gw, gh); g.beginPath(); g.moveTo(x0, gy + gh / 2); g.lineTo(x0 + gw, gy + gh / 2); g.stroke();
+  g.setLineDash([4, 4]); g.strokeStyle = '#dc2626'; g.lineWidth = 1.2; g.beginPath();
+  for (let j = 0; j <= 300; j++) { const q = Math.max(0, t - WIN) + WIN * j / 300; if (q > t) break; const y = gy + gh / 2 - Math.cos(p.O * q) * (gh / 2 - 4) * 0.5; j ? g.lineTo(Xt(q), y) : g.moveTo(Xt(q), y); }
+  g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath(); hist.forEach(([q, s], i) => i ? g.lineTo(Xt(q), Yt(s)) : g.moveTo(Xt(q), Yt(s))); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left';
+  g.fillText('x(t), шкала ±' + fmt(ymax * 100, 1) + ' см', x0 + 4, gy + 12); g.fillText('окно 10 с', x0 + 4, gy + gh + 14);
+  // резонансная кривая
+  const rx = x0 + split + 12, rw = sw - split - 12, cmax = Math.max(Ares, F0 / p.w ** 2) * 1.1;
+  const Xr = O => rx + rw * O / OMAX, Yr = A => gy + gh - A / cmax * (gh - 6);
+  g.strokeStyle = '#e5e7eb'; g.strokeRect(rx, gy, rw, gh);
+  g.strokeStyle = '#9ca3af'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(Xr(p.w), gy); g.lineTo(Xr(p.w), gy + gh); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#d97706'; g.lineWidth = 2; g.beginPath();
+  for (let j = 0; j <= 400; j++) { const O = OMAX * j / 400; j ? g.lineTo(Xr(O), Yr(amp(O, p))) : g.moveTo(Xr(O), Yr(amp(O, p))); } g.stroke();
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(Xr(p.O), Yr(Math.min(meas, cmax)), 4, 0, 7); g.fill();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.arc(Xr(p.O), Yr(Ath), 6, 0, 7); g.stroke();
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText('A(Ω), макс. ' + fmt(Ares * 100, 1) + ' см', rx + 4, gy + 12);
+  g.textAlign = 'center'; g.fillText('ω₀', Xr(p.w), gy + gh + 14); g.textAlign = 'right'; g.fillText('Ω до 15 рад/с', rx + rw, gy + gh + 14);
+  // показания
+  const phi = Math.atan2(2 * p.b * p.O, p.w ** 2 - p.O ** 2) * 180 / Math.PI;
+  $('Oo').textContent = fmt(p.O, 1) + ' рад/с'; $('wo').textContent = fmt(p.w, 1) + ' рад/с (k = ' + fmt(p.w * p.w, 1) + ' Н/м)'; $('bo').textContent = fmt(p.b) + ' 1/с';
+  $('read').innerHTML = ro('Ω / ω₀', fmt(p.O / p.w)) + ro('добротность Q', fmt(p.w / (2 * p.b), 1)) + ro('статический F₀/k', fmt(F0 / p.w ** 2 * 100, 1) + ' см') +
+    ro('A по формуле', fmt(Ath * 100, 1) + ' см') + ro('A сейчас', fmt(meas * 100, 1) + ' см') + ro('отставание фазы', fmt(phi, 0) + '°') + ro('время t', fmt(t, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset; $('def').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); reset(); };
+IDS.forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+reset(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

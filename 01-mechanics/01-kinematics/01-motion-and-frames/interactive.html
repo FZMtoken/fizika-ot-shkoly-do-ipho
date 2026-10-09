@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Относительность движения</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  label span { font-weight:400; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .readout { font-variant-numeric:tabular-nums; margin-top:8px; }
+  .readout b { color:#2563eb; }
+  .task { border-left:4px solid #2563eb; }
+
+  /* Стабильная вёрстка: размеры блоков не зависят от значений, ничего не прыгает при движении ползунков и нажатии кнопок */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; color:var(--ink); }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  td, th { white-space:nowrap; }
+  #play { min-width: 7.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Относительность движения</h1>
+  <p class="lead">Одно и то же движение глазами двух наблюдателей: на платформе и в вагоне.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="mode">
+        <button data-v="walk" class="on">Пассажир идёт по вагону</button>
+        <button data-v="ball">Мяч в вагоне</button>
+      </div>
+      <div class="seg" id="frame">
+        <button data-v="ground" class="on">Смотрю с платформы</button>
+        <button data-v="train">Смотрю из вагона</button>
+      </div>
+    </div>
+    <div class="controls">
+      <label>Скорость вагона u: <span id="uo"></span>
+        <input id="u" type="range" min="0" max="5" step="0.5" value="4"></label>
+      <label id="wl">Скорость пассажира в вагоне v′: <span id="wo"></span>
+        <input id="w" type="range" min="-1.2" max="1.2" step="0.2" value="-1"></label>
+    </div>
+    <div class="row" style="margin-top:10px;margin-bottom:0">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="scene" height="200"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь u = 4 м/с и v′ = −1 м/с. Какой будет скорость пассажира для наблюдателя на платформе? Проверь по формуле v = v′ + u.</li>
+      <li>Подбери скорости так, чтобы для платформы пассажир стоял на месте. Как он при этом выглядит из вагона?</li>
+      <li>В режиме «Мяч в вагоне» сравни след мяча в двух системах отсчёта. Какой из них «настоящий»?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const T = 8;            // длительность опыта, с
+const G = 9.8;          // м/с²
+const TL = 20;          // длина вагона, м
+const $ = id => document.getElementById(id);
+let mode = 'walk', frame = 'ground', u, w, t = 0, running = false, last = null;
+
+const fmt = n => (Math.round(n * 100) / 100).toString().replace('.', ',').replace('-', '−');
+
+// Положения в СО платформы (x вправо, y вверх), t в секундах
+const trainX = tt => u * tt;                           // левый край вагона
+const personX = tt => trainX(tt) + TL / 2 + (mode === 'walk' ? w * tt : 0);
+function ballPos(tt) {                                  // мяч подбрасывают каждые 2 с
+  const tau = tt % 2, vy = G * 1;                       // время полёта 2 с
+  return [personX(tt), 1.5 + vy * tau - G * tau * tau / 2];
+}
+
+function params() {
+  u = +$('u').value; w = +$('w').value;
+  $('uo').textContent = fmt(u) + ' м/с';
+  $('wo').textContent = fmt(w) + ' м/с';
+  $('wl').style.opacity = mode === 'walk' ? 1 : .35;
+  $('w').disabled = mode !== 'walk';
+}
+
+function setup(c) {
+  const r = window.devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  return [g, W, H];
+}
+
+function draw() {
+  const [g, W, H] = setup($('scene'));
+  const span = TL + 5 * T + 10;                  // сколько метров помещается по ширине
+  const k = W / span;                            // пикселей на метр
+  const ground = H - 40;
+  // камера: в СО платформы неподвижна, в СО вагона едет вместе с вагоном
+  const cam = tt => frame === 'ground' ? -5 : trainX(tt) + TL / 2 - span / 2;
+  const sx = (x, tt = t) => (x - cam(tt)) * k;
+  const sy = y => ground - y * k;
+
+  // небо и земля
+  g.fillStyle = '#eef3f8'; g.fillRect(0, 0, W, ground);
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, ground, W, H - ground);
+
+  // столбы на платформе через каждые 5 м — по ним видно движение фона
+  g.fillStyle = '#8a8a8a'; g.font = '11px system-ui'; g.textAlign = 'center';
+  const x0 = Math.floor(cam(t) / 5) * 5;
+  for (let x = x0; x <= cam(t) + span + 5; x += 5) { if (x < 0) continue;
+    const px = sx(x);
+    g.fillRect(px - 1.5, ground - 5 * k, 3, 5 * k);
+    g.fillText(x + ' м', px, ground + 16);
+  }
+
+  // вагон
+  const tx = sx(trainX(t));
+  g.fillStyle = '#c7d7ee'; g.strokeStyle = '#4b6a99'; g.lineWidth = 2;
+  g.fillRect(tx, sy(3.2), TL * k, 2.7 * k); g.strokeRect(tx, sy(3.2), TL * k, 2.7 * k);
+  g.fillStyle = '#333';
+  for (const wx of [2.5, TL - 2.5]) { g.beginPath(); g.arc(tx + wx * k, sy(0.4), 0.4 * k + 2, 0, 7); g.fill(); }
+
+  // след: положения, пересчитанные в текущую СО
+  const trail = [];
+  for (let tt = 0; tt <= t; tt += 0.02) {
+    const [x, y] = mode === 'walk' ? [personX(tt), 1.2] : ballPos(tt);
+    // в СО вагона вычитаем смещение вагона между моментом tt и текущим моментом t
+    const xf = frame === 'ground' ? x : x + (trainX(t) - trainX(tt));
+    trail.push([sx(xf), sy(y)]);
+  }
+  g.strokeStyle = mode === 'walk' ? '#2563eb' : '#dc2626'; g.lineWidth = 2; g.setLineDash([4, 4]);
+  g.beginPath(); trail.forEach(([a, b], i) => i ? g.lineTo(a, b) : g.moveTo(a, b)); g.stroke();
+  g.setLineDash([]);
+
+  // пассажир
+  const px = sx(personX(t));
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 3;
+  g.beginPath(); g.arc(px, sy(2.35), 0.25 * k + 2, 0, 7); g.stroke();
+  g.beginPath(); g.moveTo(px, sy(2.1)); g.lineTo(px, sy(1.2));
+  g.moveTo(px, sy(1.2)); g.lineTo(px - 0.3 * k, sy(0.5)); g.moveTo(px, sy(1.2)); g.lineTo(px + 0.3 * k, sy(0.5));
+  g.stroke();
+
+  if (mode === 'ball') {
+    const [bx, by] = ballPos(t);
+    g.fillStyle = '#dc2626'; g.beginPath(); g.arc(sx(bx), sy(by), 0.25 * k + 3, 0, 7); g.fill();
+  }
+
+  // подпись системы отсчёта
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left';
+  g.fillText(frame === 'ground' ? 'Камера неподвижна относительно платформы' : 'Камера едет вместе с вагоном', 10, 20);
+
+  const vg = u + (mode === 'walk' ? w : 0), vt = mode === 'walk' ? w : 0;
+  $('read').innerHTML = ro('время t', fmt(t) + ' с') + ro('скорость отн. вагона', fmt(vt) + ' м/с') +
+    ro('скорость отн. платформы', fmt(vg) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) t = Math.min(T, t + (ts - last) / 1000);
+  last = ts; draw();
+  if (t >= T) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+
+function seg(id, cb) {
+  $(id).querySelectorAll('button').forEach(b => b.onclick = () => {
+    $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    cb(b.dataset.v);
+  });
+}
+seg('mode', v => { mode = v; params(); t = 0; draw(); });
+seg('frame', v => { frame = v; draw(); });
+
+$('play').onclick = () => {
+  if (t >= T) t = 0;
+  running = !running; last = null;
+  $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) requestAnimationFrame(tick);
+};
+$('reset').onclick = () => { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); };
+['u', 'w'].forEach(id => $(id).oninput = () => { params(); draw(); });
+window.onresize = draw;
+// ссылка вида #mode=ball&frame=train&t=5 открывает нужное состояние
+const hp = new URLSearchParams(location.hash.slice(1));
+if (hp.get("mode")) document.querySelector(`#mode [data-v="${hp.get("mode")}"]`)?.click();
+if (hp.get("frame")) document.querySelector(`#frame [data-v="${hp.get("frame")}"]`)?.click();
+params(); t = Math.min(T, +hp.get("t") || 0); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

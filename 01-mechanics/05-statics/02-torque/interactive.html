@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Рычаг с грузами</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .ro b.ok { color:#16a34a; } .ro b.bad { color:#dc2626; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Рычаг с грузами</h1>
+  <p class="lead">Линейка длиной 1 м с делениями через 10 см лежит на опоре. Положения грузов и опоры отсчитываются от левого конца. Если сумма моментов не равна нулю, рычаг поворачивается до упора.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Синий груз: масса</i><span id="m1o"></span><input id="m1" type="range" min="0" max="5" step="0.5" value="2"></label>
+      <label><i>Синий груз: положение</i><span id="x1o"></span><input id="x1" type="range" min="0" max="100" step="5" value="30"></label>
+      <label><i>Положение опоры</i><span id="po"></span><input id="p" type="range" min="20" max="80" step="5" value="50"></label>
+      <label><i>Красный груз: масса</i><span id="m2o"></span><input id="m2" type="range" min="0" max="5" step="0.5" value="1"></label>
+      <label><i>Красный груз: положение</i><span id="x2o"></span><input id="x2" type="range" min="0" max="100" step="5" value="60"></label>
+      <label><i>Масса самого рычага</i><span id="m0o"></span><input id="m0" type="range" min="0" max="2" step="0.5" value="0"></label>
+    </div>
+    <div class="row"><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Синий груз 2 кг висит в 20 см слева от опоры. Где нужно повесить красный груз 1 кг, чтобы рычаг был в равновесии?</li>
+      <li>Сдвинь опору на 30 см и сделай рычаг тяжёлым (1 кг). Почему без грузов он наклоняется? Уравновесь его одним грузом.</li>
+      <li>Сравни силу давления на опору с суммой весов грузов и рычага. Зависит ли она от того, где висят грузы?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, MAXA = 6 * Math.PI / 180;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['m1', 'x1', 'm2', 'x2', 'p', 'm0'];
+const DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let ang = 0, target = 0, anim = false;
+
+function state() {
+  const v = Object.fromEntries(IDS.map(id => [id, +$(id).value])), p = v.p / 100;
+  // моменты относительно опоры, против часовой стрелки — плюс (груз левее опоры)
+  const M1 = v.m1 * G * (p - v.x1 / 100), M2 = v.m2 * G * (p - v.x2 / 100), M0 = v.m0 * G * (p - 0.5);
+  return { ...v, M1, M2, M0, sum: M1 + M2 + M0, N: (v.m1 + v.m2 + v.m0) * G };
+}
+
+function arrow(g, x1, y1, x2, y2, col, lab) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + 5, y2 + (uy > 0 ? -4 : 12)); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = state(), x0 = W * 0.08, L = W * 0.84, px = x0 + L * S.p / 100, py = 110, fs = 1.6;
+  const at = u => { const dx = x0 + L * u - px; return [px + dx * Math.cos(ang), py + dx * Math.sin(ang)]; }; // точка рычага, u — доля длины
+  // опора и пол
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, H - 14, W, 14);
+  g.fillStyle = '#6b6b70'; g.beginPath(); g.moveTo(px, py + 6); g.lineTo(px - 9, py + 30); g.lineTo(px + 9, py + 30); g.fill(); g.fillRect(px - 4, py + 30, 8, H - 14 - py - 30); g.fillRect(px - 26, H - 22, 52, 8);
+  // рычаг
+  g.save(); g.translate(px, py); g.rotate(ang);
+  g.fillStyle = S.m0 > 0 ? '#c8a96a' : '#e7d6ae'; g.fillRect(x0 - px, -6, L, 12);
+  g.strokeStyle = '#8b6f3a'; g.lineWidth = 1; g.font = '10px system-ui'; g.fillStyle = '#5b4a2a'; g.textAlign = 'center';
+  for (let i = 0; i <= 10; i++) { const x = x0 - px + L * i / 10; g.beginPath(); g.moveTo(x, -6); g.lineTo(x, i % 5 ? 0 : 6); g.stroke(); g.fillText(i * 10, x, -10); }
+  g.restore();
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
+  // вес рычага
+  if (S.m0 > 0) { const [cx, cy] = at(0.5); arrow(g, cx, cy, cx, cy + S.m0 * G * fs + 8, '#b45309', 'm₀g'); }
+  // грузы
+  const load = (m, x, col) => { if (m <= 0) return; const [hx, hy] = at(x / 100), s = 16 + m * 4, top = hy + 34;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx, top); g.stroke();
+    g.fillStyle = col; g.fillRect(hx - s / 2, top, s, s); g.fillStyle = '#fff'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m), hx, top + s / 2 + 4);
+    arrow(g, hx, top + s, hx, top + s + m * G * fs, '#16a34a', ''); };
+  load(S.m1, S.x1, '#2563eb'); load(S.m2, S.x2, '#dc2626');
+  // реакция опоры
+  arrow(g, px + 18, py + 40 + S.N * fs * 0.6, px + 18, py + 40, '#7c3aed', 'N');
+  // подпись
+  const bal = Math.abs(S.sum) < 1e-9;
+  g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillStyle = bal ? '#16a34a' : '#dc2626';
+  g.fillText(bal ? 'равновесие: моменты уравновешены' : (S.sum > 0 ? 'перевешивает левая сторона' : 'перевешивает правая сторона'), 12, 22);
+  // показания
+  $('m1o').textContent = fmt(S.m1) + ' кг'; $('m2o').textContent = fmt(S.m2) + ' кг'; $('m0o').textContent = fmt(S.m0) + ' кг';
+  const pos = x => `${x} см (${x === S.p ? 'над опорой' : Math.abs(x - S.p) + ' см ' + (x < S.p ? 'левее' : 'правее') + ' опоры'})`;
+  $('x1o').textContent = pos(S.x1); $('x2o').textContent = pos(S.x2); $('po').textContent = S.p + ' см';
+  const ccw = [S.M1, S.M2, S.M0].filter(m => m > 0).reduce((a, b) => a + b, 0), cw = -[S.M1, S.M2, S.M0].filter(m => m < 0).reduce((a, b) => a + b, 0);
+  $('read').innerHTML = ro('момент синего груза', fmt(S.M1, 2) + ' Н·м') + ro('момент красного груза', fmt(S.M2, 2) + ' Н·м') + ro('момент веса рычага', fmt(S.M0, 2) + ' Н·м') +
+    ro('против часовой', fmt(ccw, 2) + ' Н·м') + ro('по часовой', fmt(cw, 2) + ' Н·м') + ro('сумма моментов', fmt(S.sum, 2) + ' Н·м', bal ? 'ok' : 'bad') +
+    ro('сила давления на опору', fmt(S.N) + ' Н');
+}
+
+function update() {
+  const S = state(); target = Math.abs(S.sum) < 1e-9 ? 0 : (S.sum > 0 ? -MAXA : MAXA);
+  if (!anim) { anim = true; requestAnimationFrame(step); }
+  draw();
+}
+function step() {
+  const d = target - ang; if (Math.abs(d) < 0.002) { ang = target; anim = false; draw(); return; }
+  ang += Math.sign(d) * Math.min(Math.abs(d), 0.012); draw(); requestAnimationFrame(step);
+}
+IDS.forEach(id => $(id).oninput = update);
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); update(); };
+window.onresize = draw;
+target = ang = (() => { const s = state().sum; return Math.abs(s) < 1e-9 ? 0 : (s > 0 ? -MAXA : MAXA); })();
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

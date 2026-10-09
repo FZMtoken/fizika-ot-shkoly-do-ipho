@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Фазовая диаграмма</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Фазовая диаграмма</h1>
+  <p class="lead">Ось давления логарифмическая: каждое деление — в 10 раз больше. Линии делят плоскость на области твёрдого тела, жидкости и газа; ТТ — тройная точка, КТ — критическая. Выбери температуру и давление — точка покажет состояние вещества. «Пуск» нагревает вещество при выбранном давлении. Линии построены по справочным точкам приближённо.</p>
+
+  <div class="card">
+    <div class="seg" id="sub"><button data-s="0" class="on">Вода</button><button data-s="1">Углекислый газ</button></div>
+    <div class="controls">
+      <label><i>Температура T</i><span id="To"></span><input id="T" type="range" min="0" max="1000" step="1" value="300"></label>
+      <label><i>Давление p</i><span id="po"></span><input id="p" type="range" min="0" max="700" step="1" value="400"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Вода, давление 100 кПа. Нажми «Пуск». При каких температурах точка пересекает линии?</li>
+      <li>Опусти давление ниже тройной точки (611 Па) и снова нагревай лёд. Что изменилось?</li>
+      <li>Выбери CO₂ и давление 100 кПа. Почему нет жидкой фазы? При каком наименьшем давлении она появляется?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const S = [
+  { name: 'вода', Tt: 273.16, pt: 611.7, Tc: 647.1, pc: 22.06e6, T0: 200, T1: 700, lp0: 1, lp1: 8,
+    vap: [[273.16, 611.7], [373.15, 101325], [473.15, 1.555e6], [573.15, 8.59e6], [647.1, 22.06e6]], subL: 51060, melt: -7.4e-8 },
+  { name: 'CO₂', Tt: 216.55, pt: 518e3, Tc: 304.13, pc: 7.377e6, T0: 150, T1: 350, lp0: 3, lp1: 8,
+    vap: [[216.55, 518e3], [250, 1.785e6], [273.15, 3.485e6], [304.13, 7.377e6]], sub2: [194.7, 101325], melt: 1.5e-7 }
+];
+let si = 0, t = 0, running = false, last = null;
+const sb = () => S[si];
+const Tof = s => sb().T0 + (sb().T1 - sb().T0) * s / 1000, lpOf = s => sb().lp0 + s / 100;                  // ползунок давления: 100 шагов на декаду
+// линия испарения: кусочно-линейная в координатах (1/T, ln p)
+function pVap(T) { const v = sb().vap; let i = 0; while (i < v.length - 2 && T > v[i + 1][0]) i++;
+  const [Ta, pa] = v[i], [Tb, pb] = v[i + 1], f = (1 / T - 1 / Ta) / (1 / Tb - 1 / Ta); return Math.exp(Math.log(pa) + f * (Math.log(pb) - Math.log(pa))); }
+function TVap(p) { const v = sb().vap, lp = Math.log(p); let i = 0; while (i < v.length - 2 && lp > Math.log(v[i + 1][1])) i++;
+  const [Ta, pa] = v[i], [Tb, pb] = v[i + 1], f = (lp - Math.log(pa)) / (Math.log(pb) - Math.log(pa)); return 1 / (1 / Ta + f * (1 / Tb - 1 / Ta)); }
+function pSub(T) { const s = sb(); if (s.subL) return s.pt * Math.exp(-s.subL / 8.31 * (1 / T - 1 / s.Tt));
+  const [Tb, pb] = s.sub2, k = Math.log(s.pt / pb) / (1 / Tb - 1 / s.Tt); return s.pt * Math.exp(-k * (1 / T - 1 / s.Tt)); }
+function TSub(p) { const s = sb(); const k = s.subL ? s.subL / 8.31 : Math.log(s.pt / s.sub2[1]) / (1 / s.sub2[0] - 1 / s.Tt); return 1 / (1 / s.Tt - Math.log(p / s.pt) / k); }
+const TMelt = p => sb().Tt + sb().melt * (p - sb().pt);
+function phase(T, p) { const s = sb();
+  if (p < s.pt) return T < TSub(p) ? 'твёрдое' : 'газ';
+  if (T < TMelt(p)) return 'твёрдое';
+  if (p >= s.pc) return T < s.Tc ? 'жидкость' : 'сверхкрит. флюид';
+  return T < Math.min(TVap(p), s.Tc) ? 'жидкость' : 'газ'; }
+const pText = p => p >= 1e6 ? fmt(p / 1e6, 2) + ' МПа' : p >= 1e3 ? fmt(p / 1e3, p < 1e4 ? 2 : 0) + ' кПа' : fmt(p, 0) + ' Па';
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const s = sb(), sT = running ? 500 - 500 * Math.cos(t * 0.5) : +$('T').value, T = Tof(sT), p = 10 ** lpOf(+$('p').value);
+  const x0 = 64, y0 = 14, w = W - x0 - 16, h = H - 46, X = TT => x0 + w * (TT - s.T0) / (s.T1 - s.T0), Y = pp => y0 + h - h * (Math.log10(pp) - s.lp0) / (s.lp1 - s.lp0);
+  // заливка областей по сетке
+  const COL = { 'твёрдое': '#dbeafe', 'жидкость': '#cffafe', 'газ': '#fef9c3', 'сверхкрит. флюид': '#fce7f3' }, N = 80;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { const TT = s.T0 + (s.T1 - s.T0) * (i + 0.5) / N, pp = 10 ** (s.lp0 + (s.lp1 - s.lp0) * (j + 0.5) / N);
+    g.fillStyle = COL[phase(TT, pp)]; g.fillRect(x0 + w * i / N, y0 + h - h * (j + 1) / N, w / N + 1, h / N + 1); }
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let k = s.lp0; k <= s.lp1; k++) g.fillText(pText(10 ** k), x0 - 4, Y(10 ** k) + 4);
+  g.textAlign = 'center'; const st = s.T1 - s.T0 > 300 ? 100 : 50; for (let TT = Math.ceil(s.T0 / st) * st; TT <= s.T1; TT += st) g.fillText(TT, X(TT), y0 + h + 14);
+  g.textAlign = 'right'; g.fillText('T, К', x0 + w, y0 + h + 28); g.textAlign = 'left'; g.fillText('p', x0 + 4, y0 + 10);
+  g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2.5;
+  g.beginPath(); for (let TT = s.Tt; TT <= s.Tc; TT += (s.Tc - s.Tt) / 200) TT === s.Tt ? g.moveTo(X(TT), Y(pVap(TT))) : g.lineTo(X(TT), Y(pVap(TT))); g.stroke();
+  g.beginPath(); for (let TT = s.T0; TT <= s.Tt; TT += 1) TT === s.T0 ? g.moveTo(X(TT), Y(pSub(TT))) : g.lineTo(X(TT), Y(pSub(TT))); g.lineTo(X(s.Tt), Y(s.pt)); g.stroke();
+  g.beginPath(); g.moveTo(X(s.Tt), Y(s.pt)); for (let k = Math.log10(s.pt); k <= s.lp1; k += 0.05) g.lineTo(X(TMelt(10 ** k)), Y(10 ** k)); g.stroke();
+  g.restore();
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui';
+  [[s.Tt, s.pt, 'ТТ'], [s.Tc, s.pc, 'КТ']].forEach(([TT, pp, l]) => { g.beginPath(); g.arc(X(TT), Y(pp), 4, 0, 7); g.fill(); g.fillText(l, X(TT) + 6, Y(pp) + 14); });
+  g.font = '13px system-ui'; g.fillStyle = '#1e3a8a'; g.fillText('твёрдое', X(s.T0) + 8, Y(10 ** (s.lp1 - 0.6)));
+  g.fillStyle = '#155e75'; g.fillText('жидкость', X((s.Tt + s.Tc) / 2) - 20, Y(10 ** (s.lp1 - 0.6)));
+  g.fillStyle = '#854d0e'; g.fillText('газ', X(s.T1) - 40, Y(10 ** (s.lp0 + 0.5)));
+  // изобара и точка
+  g.setLineDash([4, 4]); g.strokeStyle = '#64748b'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, Y(p)); g.lineTo(x0 + w, Y(p)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(T), Y(p), 7, 0, 7); g.fill();
+  $('To').textContent = fmt(T, 0) + ' К (' + fmt(T - 273.15, 0) + ' °C)'; $('po').textContent = pText(p);
+  const ph = phase(T, p);
+  const boil = p < s.pt ? fmt(TSub(p), 0) + ' К' : p >= s.pc ? 'нет (p > pкр)' : fmt(TVap(p), 0) + ' К';
+  $('read').innerHTML = ro('состояние', ph) + ro('температура', fmt(T, 0) + ' К') + ro('давление', pText(p)) +
+    ro(p < s.pt ? 'возгонка при этом p' : 'кипение при этом p', boil) + ro('плавление при этом p', p < s.pt ? '— (ниже ТТ)' : fmt(TMelt(p), 2) + ' К');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('T').value = Math.round(500 - 500 * Math.cos(t * 0.5)); running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) { t = 0; requestAnimationFrame(tick); } else draw(); };
+function defaults() { $('p').max = (sb().lp1 - sb().lp0) * 100; $('T').value = si === 0 ? 200 : 300; $('p').value = (5 - sb().lp0) * 100; }   // 100 кПа
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; si = 0; $('sub').querySelectorAll('button').forEach(z => z.classList.toggle('on', z.dataset.s === '0')); defaults(); draw(); };
+$('sub').querySelectorAll('button').forEach(b => b.onclick = () => { $('sub').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); si = +b.dataset.s; defaults(); draw(); });
+['T', 'p'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+defaults(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

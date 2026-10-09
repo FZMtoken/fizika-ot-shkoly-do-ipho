@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Импульс на стыке струн</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Импульс на стыке струн</h1>
+  <p class="lead">Слева лёгкая струна (масса метра μ₁), справа — струна с массой метра μ₂, натяжение общее. Импульс бежит слева к стыку, часть его отражается, часть проходит. Толщина линии справа показывает, насколько вторая струна тяжелее.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Отношение масс μ₂/μ₁</i><span id="mo"></span><input id="m" type="range" min="0" max="10" step="1" value="7"></label>
+      <label><i>Ширина импульса</i><span id="wo"></span><input id="w" type="range" min="0.3" max="1.5" step="0.05" value="0.6"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сначала</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь μ₂/μ₁ = 4. Измерь высоты отражённого и прошедшего импульсов (шкала слева). Совпадают ли они с −1/3 и 2/3?</li>
+      <li>Сделай вторую струну легче первой. Перевёрнут ли теперь отражённый импульс? Почему прошедший выше падающего?</li>
+      <li>При каком отношении масс отражения нет? Что будет при очень тяжёлой второй струне?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const XL = 8, V1 = 2, X0 = 5, CYC = 7;                    // по 8 м с каждой стороны, v₁ = 2 м/с, импульс стартует в 5 м от стыка, цикл 7 с
+const RAT = [1 / 25, 1 / 16, 1 / 9, 1 / 4, 1 / 2, 1, 2, 4, 9, 16, 25];
+let t = 0, running = true, last = null;
+
+function par() { const ratio = RAT[+$('m').value], s = Math.sqrt(ratio), w = +$('w').value;   // μ₂/μ₁ — из ряда RAT
+  return { ratio, s, w, r: (1 - s) / (1 + s), tau: 2 / (1 + s), v2: V1 / s }; }
+const f = (p, u) => Math.exp(-(u * u) / (2 * (p.w / 2.5) ** 2));
+function y(p, x, q) { const tt = q % CYC;
+  if (x <= 0) return f(p, x + X0 - V1 * tt) + p.r * f(p, -x + X0 - V1 * tt);                  // падающий + отражённый
+  return p.tau * f(p, x * V1 / p.v2 + X0 - V1 * tt); }                                          // прошедший: тот же профиль, сжат в v₁/v₂ раз
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 40, sw = W - x0 - 16, X = x => x0 + sw * (x + XL) / (2 * XL), cy = H * 0.58, A = H * 0.32, Y = v => cy - v * A;
+  // шкала
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+  [-1, -0.5, 0, 0.5, 1, 1.5].forEach(v => { if (Y(v) < 8 || Y(v) > H - 8) return; g.beginPath(); g.moveTo(x0, Y(v)); g.lineTo(x0 + sw, Y(v)); g.stroke(); g.fillText(fmt(v, 1), x0 - 6, Y(v) + 4); });
+  // стык
+  g.strokeStyle = '#9ca3af'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(X(0), 8); g.lineTo(X(0), H - 8); g.stroke(); g.setLineDash([]);
+  g.textAlign = 'center'; g.fillText('стык', X(0), H - 4);
+  // струны
+  const draw1 = (a, b, lw, col) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (let j = 0; j <= 400; j++) { const x = a + (b - a) * j / 400; j ? g.lineTo(X(x), Y(y(p, x, t))) : g.moveTo(X(x), Y(y(p, x, t))); } g.stroke(); };
+  draw1(-XL, 0, 2, '#2563eb'); draw1(0, XL, Math.max(1, Math.min(9, 2 * p.s)), '#d97706');
+  g.textAlign = 'left'; g.fillStyle = '#2563eb'; g.fillText('μ₁, v₁ = 2 м/с', X(-XL) + 4, 16); g.fillStyle = '#d97706'; g.fillText('μ₂, v₂ = ' + fmt(p.v2) + ' м/с', X(0) + 6, 16);
+  // показания
+  const Er = p.r * p.r, Et = p.s * p.tau * p.tau;
+  $('mo').textContent = p.ratio < 1 ? '1/' + fmt(1 / p.ratio, 0) : fmt(p.ratio, 0); $('wo').textContent = fmt(p.w) + ' м';
+  $('read').innerHTML = ro('r = (1 − √(μ₂/μ₁))/(1 + √(μ₂/μ₁))', fmt(p.r, 3)) + ro('τ = 2/(1 + √(μ₂/μ₁))', fmt(p.tau, 3)) +
+    ro('отражённая энергия r²', fmt(Er * 100, 1) + ' %') + ro('прошедшая энергия', fmt(Et * 100, 1) + ' %') + ro('время t', fmt(t % CYC, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { t = 0; draw(); };
+['m', 'w'].forEach(id => $(id).oninput = () => { t = 0; draw(); });
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

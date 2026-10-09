@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тележки на воздушной дорожке</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  .c1 { color:#2563eb; } .c2 { color:#16a34a; } .ct { color:#dc2626; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Тележки на воздушной дорожке</h1>
+  <p class="lead">Трения нет. Тележки сталкиваются и либо отскакивают (на них пружинные буферы), либо слипаются (на них липучка).
+    Следи за <b class="ct">суммарным импульсом</b>.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="el" class="on">Отскок</button><button data-m="in">Слипание</button></div>
+    <div class="controls">
+      <label class="c1">Масса m₁:<span id="m1o"></span><input id="m1" type="range" min="0.5" max="4" step="0.5" value="1"></label>
+      <label class="c1">Скорость v₁:<span id="v1o"></span><input id="v1" type="range" min="-3" max="3" step="0.5" value="2"></label>
+      <label class="c2">Масса m₂:<span id="m2o"></span><input id="m2" type="range" min="0.5" max="4" step="0.5" value="2"></label>
+      <label class="c2">Скорость v₂:<span id="v2o"></span><input id="v2" type="range" min="-3" max="3" step="0.5" value="-1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="track" height="110"></canvas>
+    <canvas id="g" height="220"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Столкни тележки в режиме «Отскок». Меняется ли суммарный импульс? А импульсы каждой тележки?</li>
+      <li>Переключи на «Слипание». Какова общая скорость? Проверь по формуле v = (m₁v₁ + m₂v₂)/(m₁ + m₂).</li>
+      <li>Поставь тележки навстречу с равными по модулю импульсами. Что будет после слипания?</li>
+      <li>Сравни кинетическую энергию до и после удара в обоих режимах. Что сохраняется всегда, а что — нет?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const TRACK = 4, TMAX = 4, CW = 0.4;       // длина дорожки (м), время записи (с), ширина тележки (м)
+let mode = 'el', x1, x2, u1, u2, t, hit, stuck, hist, running = false, last = null;
+const P = () => ({ m1: +$('m1').value, v1: +$('v1').value, m2: +$('m2').value, v2: +$('v2').value });
+function init() { const p = P(); x1 = 1.0; x2 = 2.6; u1 = p.v1; u2 = p.v2; t = 0; hit = false; stuck = false; hist = [{ t: 0, p1: p.m1 * u1, p2: p.m2 * u2 }]; }
+function step(h) {
+  const p = P();
+  x1 += u1 * h; x2 += u2 * h; t += h;
+  if (!hit && x2 - x1 <= CW) {      // удар
+    hit = true; x2 = x1 + CW;
+    if (mode === 'el') { const a = ((p.m1 - p.m2) * u1 + 2 * p.m2 * u2) / (p.m1 + p.m2), b = ((p.m2 - p.m1) * u2 + 2 * p.m1 * u1) / (p.m1 + p.m2); u1 = a; u2 = b; }
+    else { const v = (p.m1 * u1 + p.m2 * u2) / (p.m1 + p.m2); u1 = v; u2 = v; stuck = true; }
+  }
+  if (stuck) x2 = x1 + CW;
+  hist.push({ t, p1: p.m1 * u1, p2: p.m2 * u2 });
+}
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+
+function draw() {
+  const p = P();
+  { const [g, W, H] = setup($('track')), k = (W - 20) / TRACK, gy = H - 30, sx = x => 10 + x * k;
+    g.fillStyle = '#d4d4d8'; g.fillRect(10, gy, W - 20, 8);
+    for (const [x, m, col, u] of [[x1, p.m1, '#2563eb', u1], [x2, p.m2, '#16a34a', u2]]) {
+      const inside = x > -CW && x < TRACK; if (!inside) continue;
+      const h = 22 + m * 6; g.fillStyle = col; g.fillRect(sx(x), gy - h, CW * k, h);
+      g.fillStyle = '#fff'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m, 1) + ' кг', sx(x + CW / 2), gy - h / 2 + 4);
+      if (Math.abs(u) > 0.01) { const ax = sx(x + CW / 2), ay = gy - h - 12, len = u * 22; g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + len - Math.sign(len) * 7, ay); g.stroke();
+        g.beginPath(); g.moveTo(ax + len, ay); g.lineTo(ax + len - Math.sign(len) * 11, ay - 5); g.lineTo(ax + len - Math.sign(len) * 11, ay + 5); g.fill(); }
+    }
+  }
+  { const [g, W, H] = setup($('g')), L = 44, R = 10, Tp = 22, B = 24, PM = 12;
+    const sx = tt => L + tt / TMAX * (W - L - R), sy = v => Tp + (PM - v) / (2 * PM) * (H - Tp - B);
+    g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let v = -PM; v <= PM; v += 4) { g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - R, sy(v)); g.stroke(); g.fillText(v, L - 4, sy(v) + 4); }
+    g.textAlign = 'center'; for (let tt = 0; tt <= TMAX; tt++) g.fillText(tt, sx(tt), H - 8);
+    g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, sy(0)); g.lineTo(W - R, sy(0)); g.stroke();
+    for (const [f, col, w] of [[h => h.p1, '#2563eb', 2], [h => h.p2, '#16a34a', 2], [h => h.p1 + h.p2, '#dc2626', 3]]) {
+      g.strokeStyle = col; g.lineWidth = w; g.beginPath(); hist.forEach((h, i) => i ? g.lineTo(sx(h.t), sy(f(h))) : g.moveTo(sx(h.t), sy(f(h)))); g.stroke(); }
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('импульсы, кг·м/с', L, 14);
+    g.font = '11px system-ui'; g.textAlign = 'right'; g.fillText('t, с', W - R, H - 8);
+  }
+  const Ek0 = p.m1 * p.v1 ** 2 / 2 + p.m2 * p.v2 ** 2 / 2, Ek = p.m1 * u1 ** 2 / 2 + p.m2 * u2 ** 2 / 2;
+  $('m1o').textContent = fmt(p.m1, 1) + ' кг'; $('v1o').textContent = fmt(p.v1, 1) + ' м/с'; $('m2o').textContent = fmt(p.m2, 1) + ' кг'; $('v2o').textContent = fmt(p.v2, 1) + ' м/с';
+  $('read').innerHTML = ro('p₁ = m₁v₁', fmt(p.m1 * u1) + ' кг·м/с', 'c1') + ro('p₂ = m₂v₂', fmt(p.m2 * u2) + ' кг·м/с', 'c2') +
+    ro('суммарный импульс', fmt(p.m1 * u1 + p.m2 * u2) + ' кг·м/с', 'ct') + ro('кинетическая энергия до', fmt(Ek0) + ' Дж') + ro('кинетическая энергия сейчас', fmt(Ek) + ' Дж');
+}
+function tick(ts) { if (!running) return; if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000); for (let i = 0; i < 10; i++) step(dt / 10); }
+  last = ts; draw();
+  const out = x1 < -CW || x1 > TRACK || x2 < -CW || x2 > TRACK;     // тележка ушла с дорожки — запись окончена
+  if (t >= TMAX || out) { running = false; $('play').textContent = '▶ Пуск'; return; } requestAnimationFrame(tick); }
+function reset() { running = false; init(); $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= TMAX || x1 < -CW || x1 > TRACK || x2 < -CW || x2 > TRACK) init(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m; reset(); });
+['m1', 'v1', 'm2', 'v2'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+init(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

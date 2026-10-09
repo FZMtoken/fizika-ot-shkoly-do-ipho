@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Точка росы</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Точка росы</h1>
+  <p class="lead">Синяя кривая — плотность насыщенного пара ρн(t): больше пара воздух при этой температуре удержать не может. Красная точка — наш воздух. Его охлаждают или нагревают до температуры t₂ (зелёная точка): пока пара меньше насыщения, абсолютная влажность не меняется; ниже точки росы лишний пар выпадает росой.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Температура воздуха t</i><span id="to"></span><input id="t" type="range" min="0" max="35" step="1" value="20"></label>
+      <label><i>Относительная влажность φ</i><span id="fo"></span><input id="f" type="range" min="10" max="100" step="1" value="70"></label>
+      <label><i>Охладить или нагреть до t₂</i><span id="t2o"></span><input id="t2" type="range" min="-5" max="35" step="1" value="5"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Воздух 20 °C, влажность 70 %. Найди точку росы. Сколько воды выпадет из 1 м³ при охлаждении до 5 °C?</li>
+      <li>Нагрей тот же воздух до 30 °C. Какой стала относительная влажность? Почему?</li>
+      <li>Сравни, сколько пара в 1 м³ при влажности 60 % при 0 °C и при 30 °C.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const pS = t => 611.2 * Math.exp(17.62 * t / (243.12 + t));       // давление насыщенного пара, Па (формула Магнуса)
+const rhoS = t => pS(t) * 0.018 / (8.31 * (t + 273.15)) * 1000;     // плотность насыщенного пара, г/м³
+function dew(rho) { let a = -40, b = 60; for (let i = 0; i < 60; i++) { const m = (a + b) / 2; if (rhoS(m) < rho) a = m; else b = m; } return (a + b) / 2; }
+let tt = 0, running = false, last = null;
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const t = +$('t').value, f = +$('f').value / 100, t2 = running ? t - (t + 5) * (1 - Math.cos(tt * 0.6)) / 2 : +$('t2').value;
+  const rho = f * rhoS(t), td = dew(rho), rho2 = Math.min(rho, rhoS(t2)), drop = rho - rho2;
+  const x0 = 50, y0 = 14, w = W - x0 - 16, h = H - 46, TMIN = -5, TMAX = 35, RMAX = 42;
+  const X = T => x0 + w * (T - TMIN) / (TMAX - TMIN), Y = r => y0 + h - h * r / RMAX;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let T = -5; T <= 35; T += 5) g.fillText(T, X(T), y0 + h + 14);
+  g.textAlign = 'right'; for (let r = 10; r <= 40; r += 10) g.fillText(r, x0 - 4, Y(r) + 4);
+  g.fillText('t, °C', x0 + w, y0 + h + 28); g.textAlign = 'left'; g.fillText('ρ, г/м³', x0 + 4, y0 + 10);
+  // область перенасыщения
+  g.fillStyle = 'rgba(37,99,235,.07)'; g.beginPath(); g.moveTo(X(TMIN), Y(rhoS(TMIN)));
+  for (let T = TMIN; T <= TMAX; T += 0.5) g.lineTo(X(T), Y(Math.min(RMAX, rhoS(T)))); g.lineTo(X(TMAX), y0); g.lineTo(X(TMIN), y0); g.closePath(); g.fill();
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath();
+  for (let T = TMIN; T <= TMAX; T += 0.5) T > TMIN ? g.lineTo(X(T), Y(Math.min(RMAX, rhoS(T)))) : g.moveTo(X(T), Y(rhoS(T))); g.stroke();
+  g.fillStyle = '#2563eb'; g.fillText('насыщенный пар (100 %)', X(10), Y(rhoS(28)) - 2);
+  // путь воздуха: горизонталь до точки росы, дальше по кривой
+  g.strokeStyle = '#64748b'; g.lineWidth = 1.5; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(X(t), Y(rho)); g.lineTo(X(Math.max(td, TMIN)), Y(rho)); g.stroke();
+  g.beginPath(); g.moveTo(X(td), Y(rho)); g.lineTo(X(td), Y(0)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#334155'; g.textAlign = 'center'; g.fillText('точка росы ' + fmt(td, 1) + ' °C', X(td), Y(0) - 6);
+  if (t2 < td) { g.strokeStyle = '#16a34a'; g.lineWidth = 3; g.beginPath(); for (let T = td; T >= t2; T -= 0.2) T === td ? g.moveTo(X(T), Y(rhoS(T))) : g.lineTo(X(T), Y(rhoS(T))); g.stroke();
+    g.strokeStyle = '#0ea5e9'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(t2), Y(rho2)); g.lineTo(X(t2), Y(rho)); g.stroke(); }
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(t), Y(rho), 6, 0, 7); g.fill();
+  g.fillStyle = '#16a34a'; g.beginPath(); g.arc(X(t2), Y(rho2), 6, 0, 7); g.fill();
+  $('to').textContent = t + ' °C'; $('fo').textContent = Math.round(f * 100) + ' %'; $('t2o').textContent = fmt(t2, 0) + ' °C';
+  $('read').innerHTML = ro('абсолютная влажность', fmt(rho, 1) + ' г/м³') + ro('точка росы', fmt(td, 1) + ' °C') + ro('давление пара', fmt(f * pS(t) / 1000, 2) + ' кПа') +
+    ro('φ при t₂', fmt(100 * rho2 / rhoS(t2), 0) + ' %') + ro('выпадет при t₂', fmt(drop, 1) + ' г/м³');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; tt += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('t2').value = Math.round(+$('t').value - (+$('t').value + 5) * (1 - Math.cos(tt * 0.6)) / 2);
+  running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) { tt = 0; requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('t').value = 20; $('f').value = 70; $('t2').value = 5; draw(); };
+['t', 'f', 't2'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

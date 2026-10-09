@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Бегущая волна</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Бегущая волна</h1>
+  <p class="lead">Источник слева начинает колебаться, и волна бежит по цепочке частиц длиной 8 м. Красная частица отмечена, чтобы было видно: она только колеблется на месте. Внизу — снимок волны y(x) и график колебаний красной частицы y(t).</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="tr" class="on">Поперечная</button><button data-k="lo">Продольная</button></div>
+    <div class="controls">
+      <label><i>Частота ν</i><span id="no"></span><input id="n" type="range" min="0.2" max="2" step="0.05" value="0.5"></label>
+      <label><i>Скорость волны v</i><span id="vo"></span><input id="v" type="range" min="0.5" max="4" step="0.1" value="1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сначала</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Следи за красной частицей. Сдвигается ли она вдоль цепочки? Когда она начинает двигаться?</li>
+      <li>Увеличь частоту вдвое, не меняя скорость. Во сколько раз изменилась длина волны? А при удвоении скорости?</li>
+      <li>Переключись на продольную волну. Найди сгущения и разрежения. Каково расстояние между соседними сгущениями?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const LEN = 8, N = 49, RED = 30, TWIN = 8;                // длина цепочки 8 м, 49 частиц, красная — №30, окно y(t) 8 с
+let kind = 'tr', t = 0, running = true, last = null;
+
+const par = () => ({ nu: +$('n').value, v: +$('v').value });
+const disp = (p, x, q) => q > x / p.v ? Math.sin(2 * Math.PI * p.nu * (q - x / p.v)) : 0;    // смещение частицы в долях амплитуды
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 30, sw = W - 2 * x0, X = x => x0 + sw * x / LEN, lam = p.v / p.nu, cy = 70, amp = 34;
+  // цепочка частиц
+  const dx = LEN / (N - 1), ampL = Math.min(sw / (N - 1) * 0.45, 14);         // продольное смещение меньше шага решётки
+  const pts = [];
+  for (let i = 0; i < N; i++) { const x = i * dx, s = disp(p, x, t);
+    pts.push(kind === 'tr' ? [X(x), cy - amp * s] : [X(x) + ampL * 1.5 * s, cy]); }
+  g.strokeStyle = '#cbd5e1'; g.lineWidth = 1; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
+  pts.forEach(([x, y], i) => { g.fillStyle = i === RED ? '#dc2626' : i === 0 ? '#1d1d1f' : '#2563eb'; g.beginPath(); g.arc(x, y, i === RED ? 6 : 4, 0, 7); g.fill(); });
+  g.strokeStyle = '#dc2626'; g.setLineDash([2, 3]); g.beginPath(); g.moveTo(X(RED * dx), cy - amp - 8); g.lineTo(X(RED * dx), cy + amp + 8); g.stroke(); g.setLineDash([]);
+  const front = Math.min(p.v * t, LEN); g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  if (front < LEN) g.fillText('фронт', X(front), cy + amp + 22);
+  // длина волны: скобка от источника
+  if (lam < LEN && front > lam) { const y = cy + amp + 14, a = X(front - lam), b = X(front);
+    g.strokeStyle = '#d97706'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a, y - 5); g.lineTo(a, y); g.lineTo(b, y); g.lineTo(b, y - 5); g.stroke();
+    g.fillStyle = '#d97706'; g.fillText('λ = ' + fmt(lam) + ' м', (a + b) / 2, y + 14); }
+  // снимок y(x)
+  const gy = 160, gh = 90, Yx = s => gy + gh / 2 - s * (gh / 2 - 6);
+  g.strokeStyle = '#e5e7eb'; g.strokeRect(x0, gy, sw, gh); g.beginPath(); g.moveTo(x0, gy + gh / 2); g.lineTo(x0 + sw, gy + gh / 2); g.stroke();
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+  for (let j = 0; j <= 400; j++) { const x = LEN * j / 400; j ? g.lineTo(X(x), Yx(disp(p, x, t))) : g.moveTo(X(x), Yx(disp(p, x, t))); } g.stroke();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(RED * dx), Yx(disp(p, RED * dx, t)), 4, 0, 7); g.fill();
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText(kind === 'tr' ? 'снимок y(x): смещение поперёк' : 'снимок: смещение вдоль цепочки (вверх — вправо)', x0 + 4, gy + 12);
+  g.textAlign = 'right'; g.fillText('x до 8 м', x0 + sw, gy + gh + 13);
+  // колебания красной частицы y(t)
+  const ty = gy + gh + 24, th = H - ty - 18, t0 = Math.max(0, t - TWIN), Xt = q => x0 + sw * (q - t0) / TWIN, Yt = s => ty + th / 2 - s * (th / 2 - 6);
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.strokeRect(x0, ty, sw, th); g.beginPath(); g.moveTo(x0, ty + th / 2); g.lineTo(x0 + sw, ty + th / 2); g.stroke();
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath();
+  for (let j = 0; j <= 400; j++) { const q = t0 + (t - t0) * j / 400; j ? g.lineTo(Xt(q), Yt(disp(p, RED * dx, q))) : g.moveTo(Xt(q), Yt(disp(p, RED * dx, q))); } g.stroke();
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText('y(t) красной частицы, окно 8 с', x0 + 4, ty + 12);
+  // показания
+  $('no').textContent = fmt(p.nu) + ' Гц'; $('vo').textContent = fmt(p.v, 1) + ' м/с';
+  $('read').innerHTML = ro('период T = 1/ν', fmt(1 / p.nu) + ' с') + ro('длина волны λ = v/ν', fmt(lam) + ' м') + ro('красная частица', 'x = ' + fmt(RED * dx, 2) + ' м') +
+    ro('волна дойдёт до неё', fmt(RED * dx / p.v, 1) + ' с') + ro('время t', fmt(t, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { t = 0; draw(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; draw(); });
+['n', 'v'].forEach(id => $(id).oninput = () => { t = 0; draw(); });
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

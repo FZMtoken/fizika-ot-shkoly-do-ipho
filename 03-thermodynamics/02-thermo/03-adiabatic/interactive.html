@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Изотерма и адиабата</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Изотерма и адиабата</h1>
+  <p class="lead">Газ начинает в состоянии 1: 10 л, 100 кПа, 300 К. Его сжимают или расширяют до объёма V₂ двумя способами: медленно, при постоянной температуре (изотерма, синяя), и быстро, без теплообмена (адиабата, красная). Закрашена работа внешних сил при адиабатном сжатии.</p>
+
+  <div class="card">
+    <div class="seg" id="gas"><button data-g="1.4" class="on">Двухатомный (воздух), γ = 1,4</button><button data-g="1.6667">Одноатомный (гелий), γ = 5/3</button></div>
+    <div class="controls">
+      <label><i>Конечный объём V₂</i><span id="Vo"></span><input id="V" type="range" min="0" max="100" step="1" value="40"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Сожми газ вдвое (до 5 л). Во сколько раз выросло давление на изотерме и на адиабате?</li>
+      <li>Переключи газ на гелий. У какого газа адиабата круче? Почему?</li>
+      <li>Сожми воздух примерно в 16 раз (до 0,6 л), как в дизеле. Какой стала температура?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const V1 = 10, P1 = 100, T1 = 300, VLO = 0.5, VHI = 30;        // л, кПа, К
+let gam = 1.4, t = 0, running = false, last = null;
+const volOf = s => VLO * (VHI / VLO) ** (s / 100);             // логарифмическая шкала ползунка
+const sOf = V => 100 * Math.log(V / VLO) / Math.log(VHI / VLO);
+const curV = () => running ? 6 + 4 * Math.cos(t * 0.7) : volOf(+$('V').value);   // при анимации: 10 л → 2 л → 10 л
+
+function niceMax(p) { const steps = [200, 300, 500, 1000, 1500, 2000, 3000, 5000, 8000, 12000, 20000]; return steps.find(s => s >= p * 1.08) || 20000; }
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const V = curV(), pI = P1 * V1 / V, pA = P1 * (V1 / V) ** gam, TA = T1 * (V1 / V) ** (gam - 1);
+  const PMAX = niceMax(running ? P1 * 5 ** gam : Math.max(P1 * 2, pA)), VMAX = Math.max(12, Math.min(32, V * 1.1 + 2));
+  const x0 = 56, y0 = 14, w = W - x0 - 16, h = H - 46, X = v => x0 + w * v / VMAX, Y = p => y0 + h - h * p / PMAX;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center';
+  const vs = VMAX > 20 ? 5 : 2; for (let v = vs; v < VMAX; v += vs) g.fillText(v, X(v), y0 + h + 14);
+  g.textAlign = 'right'; const ps = PMAX / 5; for (let p = ps; p <= PMAX + 1; p += ps) g.fillText(Math.round(p), x0 - 4, Y(p) + 4);
+  g.fillText('V, л', x0 + w, y0 + h + 28); g.textAlign = 'left'; g.fillText('p, кПа', x0 + 4, y0 + 10);
+  g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  // работа при адиабатном процессе от V1 до V
+  g.fillStyle = V < V1 ? 'rgba(220,38,38,.15)' : 'rgba(37,99,235,.12)'; g.beginPath(); g.moveTo(X(V1), Y(0));
+  for (let j = 0; j <= 60; j++) { const v = V1 + (V - V1) * j / 60; g.lineTo(X(v), Y(P1 * (V1 / v) ** gam)); } g.lineTo(X(V), Y(0)); g.closePath(); g.fill();
+  const curve = (f, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (let v = 0.3; v <= VMAX; v += VMAX / 300) v > 0.3 ? g.lineTo(X(v), Y(f(v))) : g.moveTo(X(v), Y(f(v))); g.stroke(); };
+  curve(v => P1 * V1 / v, '#2563eb', 2); curve(v => P1 * (V1 / v) ** gam, '#dc2626', 2);
+  g.restore();
+  const dot = (v, p, col, r) => { if (p > PMAX) return; g.fillStyle = col; g.beginPath(); g.arc(X(v), Y(p), r, 0, 7); g.fill(); };
+  dot(V1, P1, '#1d1d1f', 4); dot(V, pI, '#2563eb', 6); dot(V, pA, '#dc2626', 6);
+  g.font = '12px system-ui'; g.fillStyle = '#2563eb'; g.textAlign = 'right'; g.fillText('изотерма', x0 + w - 4, Y(P1 * V1 / VMAX) - 8);
+  g.fillStyle = '#dc2626'; g.fillText('адиабата', x0 + w - 4, Y(P1 * (V1 / VMAX) ** gam) + 16);
+  const i = gam > 1.5 ? 3 : 5, nu = P1 * V1 / (8.31 * T1), A = i / 2 * nu * 8.31 * (TA - T1);
+  $('Vo').textContent = fmt(V, 2) + ' л (в ' + fmt(V1 / V >= 1 ? V1 / V : V / V1, 2) + ' раза ' + (V1 / V >= 1 ? 'сжат)' : 'расширен)');
+  $('read').innerHTML = ro('p на изотерме', fmt(pI, 0) + ' кПа') + ro('p на адиабате', fmt(pA, 0) + ' кПа') + ro('T на адиабате', fmt(TA, 0) + ' К') +
+    ro('работа над газом (адиаб.)', fmt(A, 0) + ' Дж') + ro('показатель γ', fmt(gam, 2));
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('V').value = Math.round(sOf(curV())); running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) { t = 0; requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('V').value = Math.round(sOf(5)); t = 0; draw(); };
+$('gas').querySelectorAll('button').forEach(b => b.onclick = () => { $('gas').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); gam = +b.dataset.g; draw(); });
+$('V').oninput = draw;
+window.onresize = draw;
+$('V').value = Math.round(sOf(5)); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

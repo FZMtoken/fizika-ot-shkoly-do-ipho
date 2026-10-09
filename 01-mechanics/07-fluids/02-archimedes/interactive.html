@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тело на динамометре</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 12px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Тело на динамометре</h1>
+  <p class="lead">Кубик объёмом 1 дм³ (ребро 10 см) висит на динамометре и опускается в жидкость. Можно отцепить его и посмотреть, как он будет плавать.</p>
+
+  <div class="card">
+    <div class="seg" id="liq"><button data-r="1000" class="on">вода 1000</button><button data-r="1030">морская 1030</button><button data-r="900">масло 900</button><button data-r="1260">глицерин 1260</button></div>
+    <div class="controls">
+      <label><i>Опускание кубика в жидкость</i><span id="dpo"></span><input id="dp" type="range" min="0" max="15" step="0.5" value="5"></label>
+      <label><i>Плотность кубика</i><span id="rto"></span><input id="rt" type="range" min="200" max="8000" step="50" value="2700"></label>
+    </div>
+    <div class="row"><div class="seg" id="mode"><button data-m="hang" class="on">На динамометре</button><button data-m="free">Отцепить</button></div></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Опускай кубик в воду и следи за динамометром. Когда показание перестаёт меняться?</li>
+      <li>Смени жидкость на морскую воду и масло. Как меняется выталкивающая сила при полном погружении?</li>
+      <li>Отцепи кубик и подбери его плотность так, чтобы он плавал внутри воды — не всплывал и не тонул.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, A = 0.1, V = A * A * A;                       // ребро кубика 10 см
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let rl = 1000, mode = 'hang';
+
+function calc() {
+  const rt = +$('rt').value, mg = rt * V * G;
+  let sub;                                                  // погружённая глубина, м
+  let d = +$('dp').value / 100, floatSub = rt < rl ? A * rt / rl : A;   // d — насколько нижняя грань опущена ниже поверхности
+  if (mode === 'hang') { sub = Math.min(A, d); if (sub > floatSub) { sub = floatSub; d = floatSub; } }
+  else { sub = floatSub; d = rt < rl ? floatSub : rt > rl ? null : 0.14; }
+  const FA = rl * G * A * A * sub, T = mode === 'hang' ? Math.max(0, mg - FA) : 0;
+  const slack = mode === 'hang' && sub === floatSub && rt < rl && +$('dp').value / 100 > floatSub;
+  const state = mode === 'free' ? (rt < rl ? 'плавает' : rt > rl ? 'тонет' : 'в равновесии внутри') : (slack ? 'плавает, нить провисла' : 'висит');
+  return { rt, mg, sub, FA, T, state, d };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = calc(), k = 900, cx = Math.min(W * 0.3, 200), surf = 170;   // k — пикселей на метр
+  const side = A * k;                                       // кубик на экране
+  // сосуд и жидкость
+  const vx = cx - 110, vw = 220, bottom = H - 20;
+  const col = rl === 1260 ? '#c7d2fe' : rl === 900 ? '#fde68a' : rl === 1030 ? '#7dd3fc' : '#bfdbfe';
+  g.fillStyle = col; g.fillRect(vx, surf, vw, bottom - surf);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(vx, surf - 60); g.lineTo(vx, bottom); g.lineTo(vx + vw, bottom); g.lineTo(vx + vw, surf - 60); g.stroke();
+  // положение кубика
+  const top = S.d === null ? bottom - side : surf - side + S.d * k;
+  // динамометр
+  if (mode === 'hang') {
+    const dy = 20, ext = 40 + S.T * 2;
+    g.fillStyle = '#e5e7eb'; g.fillRect(cx - 14, dy, 28, 90); g.strokeStyle = '#6b6b70'; g.lineWidth = 1; g.strokeRect(cx - 14, dy, 28, 90);
+    g.fillStyle = '#dc2626'; g.fillRect(cx - 12, dy + Math.min(84, S.T * 3.5), 24, 3);
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(cx, dy + 90); g.lineTo(cx, top); g.stroke();
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(fmt(S.T, 1) + ' Н', cx + 20, dy + 50);
+  }
+  g.fillStyle = S.rt > 5000 ? '#6b7280' : S.rt > 1500 ? '#9ca3af' : '#c8a96a'; g.fillRect(cx - side / 2, top, side, side);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.strokeRect(cx - side / 2, top, side, side);
+  // поверхность поверх кубика (линия)
+  g.strokeStyle = '#2563eb'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(vx, surf); g.lineTo(vx + vw, surf); g.stroke();
+  // стрелки сил
+  const fs = 110 / Math.max(S.mg, S.FA, 1), ax = cx + side / 2 + 18;
+  const arrow = (x1, y1, x2, y2, col, lab) => { const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return; const uy = (y2 - y1) / L;
+    g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2 - uy * 7); g.stroke();
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - 5, y2 - uy * 11); g.lineTo(x2 + 5, y2 - uy * 11); g.fill(); g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + 7, y2); };
+  const mid = top + side / 2;
+  arrow(ax, mid, ax, mid + S.mg * fs, '#16a34a', 'mg');
+  arrow(ax + 34, mid, ax + 34, mid - S.FA * fs, '#2563eb', 'Fₐ');
+  // показания
+  $('dpo').textContent = mode === 'hang' ? fmt(+$('dp').value, 1) + ' см' : 'кубик отцеплен'; $('rto').textContent = S.rt + ' кг/м³';
+  $('read').innerHTML = ro('вес в воздухе mg', fmt(S.mg, 1) + ' Н') + ro('сила Архимеда', fmt(S.FA, 2) + ' Н') + ro('динамометр', mode === 'hang' ? fmt(S.T, 2) + ' Н' : '—') +
+    ro('погружено', fmt(100 * S.sub / A, 0) + ' %') + ro('плотность жидкости', rl + ' кг/м³') + ro('состояние', S.state);
+}
+
+$('liq').querySelectorAll('button').forEach(b => b.onclick = () => { $('liq').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); rl = +b.dataset.r; draw(); });
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { $('mode').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); mode = b.dataset.m; draw(); });
+['dp', 'rt'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

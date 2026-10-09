@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Грузы на блоке</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off] { visibility:hidden; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Грузы на блоке</h1>
+  <p class="lead">Нить невесомая и нерастяжимая, блок лёгкий и без трения. Синие стрелки — натяжение нити, зелёные — силы тяжести.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="atw" class="on">Машина Атвуда</button><button data-m="tab">Стол и груз</button></div>
+    <div class="controls">
+      <label><i id="l1">Масса левого груза m₁</i>:<span id="m1o"></span><input id="m1" type="range" min="0.5" max="5" step="0.1" value="3"></label>
+      <label>Масса висящего груза m₂:<span id="m2o"></span><input id="m2" type="range" min="0.5" max="5" step="0.1" value="2"></label>
+      <label class="slot" id="mus">Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0" max="1" step="0.05" value="0.2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>В машине Атвуда сделай массы равными. Что будет с грузами? Добавь 0,1 кг к одному.</li>
+      <li>Сравни натяжение нити с силами тяжести грузов. Между какими значениями оно лежит?</li>
+      <li>В режиме «Стол и груз» подбери наименьший коэффициент трения, при котором система стоит.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let mode = 'atw', s = 0, v = 0, t = 0, running = false, last = null;
+const P = () => ({ m1: +$('m1').value, m2: +$('m2').value, mu: +$('mu').value });
+function dyn() {           // ускорение (положительно — m₂ опускается) и натяжение
+  const { m1, m2, mu } = P();
+  if (mode === 'atw') { const a = (m2 - m1) * G / (m1 + m2); return { a, T: 2 * m1 * m2 * G / (m1 + m2), stuck: false }; }
+  const drive = m2 * G, fmax = mu * m1 * G;
+  if (v === 0 && drive <= fmax) return { a: 0, T: drive, stuck: true };
+  const a = (drive - fmax) / (m1 + m2); return { a, T: m2 * (G - a), stuck: false };
+}
+const LIM = 1.2;           // наибольшее перемещение, м
+function reset() { running = false; s = 0; v = 0; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+
+function arrow(g, x, y1, x2, y2, col, lab) { const L = Math.hypot(x2 - x, y2 - y1); if (L < 3) return; const ux = (x2 - x) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + 6, y2 + (uy > 0 ? -2 : 12)); }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const { m1, m2, mu } = P(), D = dyn(), k = 120, fs = 3;       // k — пикселей на метр, fs — пикселей на ньютон
+  const box = (x, y, m, col) => { const w = 26 + m * 7; g.fillStyle = col; g.fillRect(x - w / 2, y, w, w * 0.8); g.fillStyle = '#fff';
+    g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m, 1) + ' кг', x, y + w * 0.45); return w; };
+  if (mode === 'atw') {
+    const px = W / 2, py = 40, R = 26, y1 = 140 - s * k, y2 = 140 + s * k;
+    g.fillStyle = '#b8b2a3'; g.fillRect(px - 4, 0, 8, py);
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(px, py, R, 0, 7); g.stroke();
+    g.beginPath(); g.moveTo(px - R, py); g.lineTo(px - R, y1); g.moveTo(px + R, py); g.lineTo(px + R, y2); g.stroke();
+    const w1 = box(px - R, y1, m1, '#2563eb'), w2 = box(px + R, y2, m2, '#dc2626');
+    arrow(g, px - R - w1 / 2 - 14, y1 + 4, px - R - w1 / 2 - 14, y1 + 4 - D.T * fs, '#2563eb', 'T');
+    arrow(g, px - R - w1 / 2 - 14, y1 + w1 * 0.8, px - R - w1 / 2 - 14, y1 + w1 * 0.8 + m1 * G * fs, '#16a34a', 'm₁g');
+    arrow(g, px + R + w2 / 2 + 14, y2 + 4, px + R + w2 / 2 + 14, y2 + 4 - D.T * fs, '#2563eb', 'T');
+    arrow(g, px + R + w2 / 2 + 14, y2 + w2 * 0.8, px + R + w2 / 2 + 14, y2 + w2 * 0.8 + m2 * G * fs, '#16a34a', 'm₂g');
+  } else {
+    const ty = 110, tx1 = 20, tx2 = W * 0.62, R = 18, kt = Math.min(k, (tx2 - tx1 - 110) / LIM), bx = tx1 + 50 + s * kt, hy = ty + 40 + s * kt;
+    g.fillStyle = '#d9d6cc'; g.fillRect(tx1, ty, tx2 - tx1, 14); g.fillRect(tx2 - 40, ty, 14, H - ty);
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(tx2, ty - R + 14, R, 0, 7); g.stroke();
+    const w1 = 26 + m1 * 7, h1 = w1 * 0.8;
+    g.beginPath(); g.moveTo(bx + w1 / 2, ty - h1 / 2); g.lineTo(tx2, ty - h1 / 2); g.moveTo(tx2 + R, ty - R + 14); g.lineTo(tx2 + R, hy); g.stroke();
+    g.fillStyle = '#2563eb'; g.fillRect(bx - w1 / 2, ty - h1, w1, h1); g.fillStyle = '#fff'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m1, 1) + ' кг', bx, ty - h1 / 2 + 4);
+    const w2 = box(tx2 + R, hy, m2, '#dc2626');
+    arrow(g, bx + w1 / 2, ty - h1 - 10, bx + w1 / 2 + D.T * fs, ty - h1 - 10, '#2563eb', 'T');
+    const ftr = D.stuck ? D.T : mu * m1 * G;
+    arrow(g, bx - w1 / 2, ty - 6, bx - w1 / 2 - ftr * fs, ty - 6, '#b45309', 'Fтр');
+    arrow(g, tx2 + R + w2 / 2 + 14, hy + 4, tx2 + R + w2 / 2 + 14, hy + 4 - D.T * fs, '#2563eb', 'T');
+    arrow(g, tx2 + R + w2 / 2 + 14, hy + w2 * 0.8, tx2 + R + w2 / 2 + 14, hy + w2 * 0.8 + m2 * G * fs, '#16a34a', 'm₂g');
+    if (D.stuck) { g.fillStyle = '#b45309'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('трение покоя удерживает систему', 12, 22); }
+  }
+  $('m1o').textContent = fmt(m1, 1) + ' кг'; $('m2o').textContent = fmt(m2, 1) + ' кг'; $('muo').textContent = fmt(mu);
+  $('read').innerHTML = ro('ускорение a', fmt(Math.abs(D.a)) + ' м/с²') + ro('натяжение T', fmt(D.T) + ' Н') +
+    ro('m₁g', fmt(m1 * G, 1) + ' Н') + ro('m₂g', fmt(m2 * G, 1) + ' Н') + ro('скорость', fmt(Math.abs(v)) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000), D = dyn(); v += D.a * dt; s += v * dt; t += dt;
+    if (Math.abs(s) >= (mode === 'atw' ? 0.8 : LIM) || D.stuck) { s = Math.max(-0.8, Math.min(mode === 'atw' ? 0.8 : LIM, s)); running = false; $('play').textContent = '▶ Пуск'; draw(); return; } }
+  last = ts; draw(); requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (Math.abs(s) >= 0.79 || s >= LIM - 0.01) { s = 0; v = 0; t = 0; } running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m;
+  $('mus').toggleAttribute('data-off', mode === 'atw'); $('l1').textContent = mode === 'atw' ? 'Масса левого груза m₁' : 'Масса бруска на столе m₁'; reset(); });
+['m1', 'm2', 'mu'].forEach(id => $(id).oninput = reset);
+$('mus').toggleAttribute('data-off', true);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

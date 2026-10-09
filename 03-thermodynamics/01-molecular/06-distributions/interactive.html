@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Распределение Максвелла</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Распределение Максвелла</h1>
+  <p class="lead">Кривая показывает, как молекулы газа распределены по скоростям. Площадь под всей кривой равна 1, закрашенная площадь — доля молекул быстрее порога. Серая кривая — тот же газ при 300 К. Вертикальные линии: наиболее вероятная, средняя и средняя квадратичная скорости. «Пуск» медленно нагревает и охлаждает газ.</p>
+
+  <div class="card">
+    <div class="seg" id="gas"></div>
+    <div class="controls">
+      <label><i>Температура T</i><span id="To"></span><input id="T" type="range" min="50" max="1500" step="10" value="300"></label>
+      <label><i>Порог скорости</i><span id="vo"></span><input id="v" type="range" min="0" max="4000" step="50" value="1000"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Выбери азот и нагрей его от 300 К до 1200 К. Во сколько раз сдвинулся максимум? Почему кривая стала ниже?</li>
+      <li>Какая доля молекул азота при 300 К быстрее 1000 м/с? А водорода при той же температуре?</li>
+      <li>Найди температуру, при которой половина молекул азота быстрее 500 м/с.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31;
+let VMAX = 4000;
+const GAS = [['H₂', 2], ['He', 4], ['N₂', 28], ['O₂', 32], ['CO₂', 44], ['Xe', 131]];
+let gi = 2, t = 0, running = false, last = null, T0 = 300;
+function erf(x) { const s = Math.sign(x); x = Math.abs(x); const q = 1 / (1 + 0.3275911 * x);
+  return s * (1 - (((((1.061405429 * q - 1.453152027) * q) + 1.421413741) * q - 0.284496736) * q + 0.254829592) * q * Math.exp(-x * x)); }
+const vp = (T, M) => Math.sqrt(2 * R * T / (M / 1000));
+const f = (v, a) => 4 / Math.sqrt(Math.PI) * v * v / a ** 3 * Math.exp(-((v / a) ** 2));     // a = v_в
+const above = (v, a) => { const x = v / a; return 1 - erf(x) + 2 / Math.sqrt(Math.PI) * x * Math.exp(-x * x); };
+const curT = () => running ? Math.min(1500, Math.round(T0 * (1.75 - 0.75 * Math.cos(t * 0.6)) / 10) * 10) : +$('T').value;   // от T0 до 2,5·T0
+const sup = d => String(d).split('').map(ch => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+ch]).join('');
+const sci = x => { const e = Math.floor(Math.log10(x)); return fmt(x / 10 ** e, 1) + '·10⁻' + sup(-e); };
+
+$('gas').innerHTML = GAS.map((g, i) => `<button data-i="${i}">${g[0]}</button>`).join('');
+const segUpd = () => $('gas').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.i === gi));
+$('gas').querySelectorAll('button').forEach(b => b.onclick = () => { gi = +b.dataset.i; segUpd(); draw(); });
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const T = curT(), M = GAS[gi][1], a = vp(T, M), a0 = vp(300, M), vth = +$('v').value;
+  VMAX = Math.min(4000, Math.ceil(4 * vp(600, M) / 500) * 500);   // своя ось для каждого газа, не меняется при нагреве
+  const x0 = 46, y0 = 14, w = W - x0 - 14, h = H - 46;
+  const fmax = Math.max(f(a, a), f(a0, a0)) * 1.12;
+  const X = v => x0 + w * v / VMAX, Y = y => y0 + h - h * y / fmax;
+  // оси
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let v = 0; v <= VMAX; v += VMAX > 2000 ? 500 : 250) { g.fillText(v, X(v), y0 + h + 14); g.beginPath(); g.moveTo(X(v), y0 + h); g.lineTo(X(v), y0 + h + 3); g.stroke(); }
+  g.textAlign = 'right'; g.fillText('v, м/с', x0 + w, y0 + h + 30); g.textAlign = 'left'; g.fillText('f(v)', x0 + 4, y0 + 10);
+  // закраска хвоста
+  if (vth < VMAX) { g.fillStyle = 'rgba(220,38,38,.22)'; g.beginPath(); g.moveTo(X(vth), Y(0));
+  for (let v = vth; v <= VMAX; v += 10) g.lineTo(X(v), Y(f(v, a))); g.lineTo(X(VMAX), Y(0)); g.closePath(); g.fill(); }
+  const curve = (aa, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (let v = 0; v <= VMAX; v += 10) v ? g.lineTo(X(v), Y(f(v, aa))) : g.moveTo(X(v), Y(0)); g.stroke(); };
+  curve(a0, '#cbd5e1', 1.5); curve(a, '#2563eb', 2.5);
+  // характерные скорости
+  const sp = [[a, 'vв', '#16a34a'], [a * Math.sqrt(4 / Math.PI), '⟨v⟩', '#ca8a04'], [a * Math.sqrt(1.5), 'vкв', '#7c3aed']];
+  g.textAlign = 'center';
+  sp.forEach(([v, l, col], i) => { if (v > VMAX) return; g.strokeStyle = col; g.lineWidth = 1.5; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(v), Y(0)); g.lineTo(X(v), Y(f(v, a))); g.stroke(); g.setLineDash([]);
+    });
+  g.textAlign = 'left'; g.font = '12px system-ui';
+  const LBL = [' — наиболее вероятная', ' — средняя', ' — средняя квадр.'], lw = Math.max(...sp.map(([, l], i) => g.measureText(l + LBL[i]).width));
+  sp.forEach(([, l, col], i) => { const lx = x0 + w - lw - 34, ly = y0 + 12 + 16 * i; g.strokeStyle = col; g.lineWidth = 1.5; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(lx, ly - 4); g.lineTo(lx + 22, ly - 4); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.fillText(l + LBL[i], lx + 28, ly); });
+  g.font = '11px system-ui';
+  if (vth <= VMAX) { g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(vth), y0); g.lineTo(X(vth), y0 + h); g.stroke(); }
+  $('To').textContent = T + ' К'; $('vo').textContent = vth + ' м/с';
+  const P = above(vth, a);
+  $('read').innerHTML = ro('наиболее вероятная vв', fmt(a, 0) + ' м/с') + ro('средняя ⟨v⟩', fmt(a * Math.sqrt(4 / Math.PI), 0) + ' м/с') +
+    ro('средняя квадратичная', fmt(a * Math.sqrt(1.5), 0) + ' м/с') + ro('быстрее порога', P >= 0.001 ? fmt(100 * P, 2) + ' %' : P > 1e-300 ? sci(P) : '0') + ro('температура', T + ' К');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('T').value = curT(); running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) { T0 = +$('T').value; t = 0; requestAnimationFrame(tick); } else { draw(); } };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; gi = 2; segUpd(); $('T').value = 300; $('v').value = 1000; t = 0; draw(); };
+['T', 'v'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+segUpd(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

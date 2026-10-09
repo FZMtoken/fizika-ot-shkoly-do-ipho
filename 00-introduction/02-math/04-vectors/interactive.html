@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Векторы</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  .tog { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; touch-action:none; cursor:crosshair; }
+  table { border-collapse:collapse; font-variant-numeric:tabular-nums; margin-top:8px; }
+  td, th { padding:3px 12px 3px 0; text-align:left; }
+  .a { color:#2563eb; font-weight:600; } .b { color:#16a34a; font-weight:600; }
+  .s { color:#dc2626; font-weight:600; } .d { color:#9333ea; font-weight:600; }
+  .task { border-left:4px solid #2563eb; }
+  .tablewrap { overflow-x:auto; }
+
+  /* Стабильная вёрстка: размеры блоков не зависят от значений, ничего не прыгает при движении ползунков и нажатии кнопок */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; color:var(--ink); }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  td, th { white-space:nowrap; }
+  table { width:100%; table-layout:fixed; } th { white-space:normal; font-size:13px; vertical-align:bottom; } th:first-child { width:3.2em; }
+  td { overflow:hidden; text-overflow:ellipsis; }
+  #play { min-width: 7.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Векторы</h1>
+  <p class="lead">Тяни за концы векторов <span class="a">a</span> и <span class="b">b</span>. Включай построения кнопками.</p>
+
+  <div class="card">
+    <div class="row">
+      <button class="tog on" data-k="sum">Сумма a + b</button>
+      <button class="tog" data-k="par">Параллелограмм</button>
+      <button class="tog" data-k="diff">Разность a − b</button>
+      <button class="tog" data-k="proj">Проекции</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="420"></canvas>
+    <div class="tablewrap"><table id="t"></table></div>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Найди положение, в котором |a + b| = a + b. А когда |a + b| наименьший?</li>
+      <li>Сделай так, чтобы a + b = 0. Что можно сказать про векторы a и b?</li>
+      <li>Поверни вектор так, чтобы его проекция на ось x стала отрицательной.</li>
+      <li>Сделай скалярное произведение равным нулю. Какой при этом угол между векторами?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const C = { a:'#2563eb', b:'#16a34a', s:'#dc2626', d:'#9333ea' };
+const show = { sum:true, par:false, diff:false, proj:false };
+const vec = { a:[4, 1], b:[1, 3] };
+let drag = null, geom = null;
+
+const fmt = n => (Math.round(n * 100) / 100).toString().replace('.', ',').replace('-', '−');
+const len = v => Math.hypot(v[0], v[1]);
+
+function setup() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const k = Math.min(W, H) / 16;                 // пикселей на единицу
+  const ox = W / 2, oy = H / 2;
+  geom = { k, ox, oy, W, H };
+  return g;
+}
+const px = ([x, y]) => [geom.ox + x * geom.k, geom.oy - y * geom.k];
+
+function arrow(g, from, to, color, label, dash) {
+  const [x1, y1] = px(from), [x2, y2] = px(to);
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 1) return;
+  const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = color; g.lineWidth = 3; g.setLineDash(dash ? [6, 5] : []);
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 8, y2 - uy * 8); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 13 - uy * 6, y2 - uy * 13 + ux * 6);
+  g.lineTo(x2 - ux * 13 + uy * 6, y2 - uy * 13 - ux * 6); g.fill();
+  if (label) { g.font = 'italic 600 17px serif'; g.textAlign = 'center'; g.fillText(label, (x1 + x2) / 2 + uy * 16, (y1 + y2) / 2 - ux * 16 + 5); g.textAlign = 'left'; }
+}
+
+function draw() {
+  const g = setup(), { k, ox, oy, W, H } = geom;
+  // сетка
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1;
+  for (let x = ox % k; x < W; x += k) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  for (let y = oy % k; y < H; y += k) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(0, oy); g.lineTo(W, oy); g.moveTo(ox, 0); g.lineTo(ox, H); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = 'italic 15px serif'; g.fillText('x', W - 14, oy - 8); g.fillText('y', ox + 8, 14);
+
+  const a = vec.a, b = vec.b, s = [a[0] + b[0], a[1] + b[1]], d = [a[0] - b[0], a[1] - b[1]];
+
+  if (show.proj) {
+    for (const [v, col] of [[a, C.a], [b, C.b]]) {
+      const [x, y] = px(v);
+      g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([3, 4]);
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x, oy); g.moveTo(x, y); g.lineTo(ox, y); g.stroke(); g.setLineDash([]);
+      g.globalAlpha = .55; g.lineWidth = 6;
+      g.beginPath(); g.moveTo(ox, oy); g.lineTo(x, oy); g.stroke();
+      g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox, y); g.stroke(); g.globalAlpha = 1;
+    }
+  }
+  if (show.par) {
+    g.strokeStyle = '#aaa'; g.lineWidth = 1.5; g.setLineDash([5, 5]);
+    const [ax, ay] = px(a), [bx, by] = px(b), [sx, sy] = px(s);
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(sx, sy); g.lineTo(bx, by); g.stroke(); g.setLineDash([]);
+  } else if (show.sum) {
+    arrow(g, a, s, C.b, '', true);               // b, приставленный к концу a
+  }
+  if (show.diff) arrow(g, b, a, C.d, 'a − b');
+  if (show.sum) arrow(g, [0, 0], s, C.s, 'a + b');
+  arrow(g, [0, 0], a, C.a, 'a');
+  arrow(g, [0, 0], b, C.b, 'b');
+  for (const v of [a, b]) { const [x, y] = px(v); g.fillStyle = '#fff'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2;
+    g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke(); }
+
+  const ang = v => fmt(Math.atan2(v[1], v[0]) * 180 / Math.PI) + '°';
+  const dot = a[0] * b[0] + a[1] * b[1];
+  const th = len(a) && len(b) ? Math.acos(Math.max(-1, Math.min(1, dot / len(a) / len(b)))) * 180 / Math.PI : 0;
+  const row = (cls, name, v, hide) => `<tr${hide ? ' style="visibility:hidden"' : ''}><td class="${cls}">${name}</td><td>${fmt(v[0])}</td><td>${fmt(v[1])}</td><td>${fmt(len(v))}</td><td>${ang(v)}</td></tr>`;
+  $('t').innerHTML = `<tr><th></th><th>проекция x</th><th>проекция y</th><th>модуль</th><th>угол с осью&nbsp;x</th></tr>` +
+    row('a', 'a', a) + row('b', 'b', b) + row('s', 'a + b', s, !show.sum) + row('d', 'a − b', d, !show.diff);
+  $('read').innerHTML = ro('скалярное произведение a·b', fmt(dot)) + ro('угол между a и b', fmt(th) + '°');
+}
+
+function toUnits(e) {
+  const r = $('c').getBoundingClientRect();
+  const x = (e.clientX - r.left - geom.ox) / geom.k, y = -(e.clientY - r.top - geom.oy) / geom.k;
+  return [Math.round(x * 2) / 2, Math.round(y * 2) / 2];   // привязка к сетке 0,5
+}
+$('c').addEventListener('pointerdown', e => {
+  const r = $('c').getBoundingClientRect(), p = [e.clientX - r.left, e.clientY - r.top];
+  let best = null, bd = 24;
+  for (const n of ['a', 'b']) { const [x, y] = px(vec[n]), dd = Math.hypot(x - p[0], y - p[1]); if (dd < bd) { bd = dd; best = n; } }
+  if (best) { drag = best; $('c').setPointerCapture(e.pointerId); }
+});
+$('c').addEventListener('pointermove', e => {
+  if (!drag) return;
+  const [x, y] = toUnits(e), m = 7.5;
+  vec[drag] = [Math.max(-m, Math.min(m, x)), Math.max(-m, Math.min(m, y))]; draw();
+});
+$('c').addEventListener('pointerup', () => drag = null);
+document.querySelectorAll('.tog').forEach(b => b.onclick = () => {
+  show[b.dataset.k] = !show[b.dataset.k]; b.classList.toggle('on', show[b.dataset.k]);
+  if (b.dataset.k === 'par' && show.par && !show.sum) { show.sum = true; document.querySelector('[data-k=sum]').classList.add('on'); }
+  draw();
+});
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

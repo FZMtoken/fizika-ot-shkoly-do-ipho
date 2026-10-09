@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Козырёк из кирпичей</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .ro b.ok { color:#16a34a; } .ro b.bad { color:#dc2626; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Козырёк из кирпичей</h1>
+  <p class="lead">Кирпичи длиной L кладут друг на друга у края стола. Оптимально k-й кирпич сверху выступает над следующим на L/(2k). Красные точки — центры тяжести групп верхних кирпичей: каждая должна лежать над опорой.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Число кирпичей n</i><span id="no"></span><input id="n" type="range" min="1" max="12" step="1" value="4"></label>
+      <label><i>Сдвиги: доля от оптимальных</i><span id="fo"></span><input id="f" type="range" min="0.5" max="1.3" step="0.05" value="1"></label>
+    </div>
+    <div class="row"><button id="opt">Оптимальные сдвиги</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Построй оптимальную стопку из 4 кирпичей. Выступает ли верхний кирпич целиком за край стола?</li>
+      <li>Сделай сдвиги чуть больше оптимальных. Что произойдёт со стопкой и почему?</li>
+      <li>Сравни вылет для 6 и 12 кирпичей. Во сколько раз он вырос, когда кирпичей стало вдвое больше?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+
+function stack() {
+  const n = +$('n').value, f = +$('f').value;
+  // правые края кирпичей в длинах L, край стола — 0; кирпич k = 1 — верхний
+  const edge = new Array(n + 2).fill(0);
+  for (let k = n; k >= 1; k--) edge[k] = edge[k + 1] + f / (2 * k);
+  // центр тяжести k верхних кирпичей и проверка опоры под ними
+  let fall = 0; const cg = [];
+  for (let j = 1; j <= n; j++) { let sx = 0; for (let k = 1; k <= j; k++) sx += edge[k] - 0.5; cg[j] = sx / j; if (cg[j] > edge[j + 1] + 1e-9) fall = j; }
+  return { n, f, edge, cg, fall, over: edge[1] };
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = stack(), Lp = Math.min((H - 70) / 3, (W - 40) / 3.4), bh = Lp / 4, tx = Math.max(20 + Lp * 1.2, W * 0.38 - Lp * 0.5), ty = H - 40;
+  // стол
+  g.fillStyle = '#c8a96a'; g.fillRect(0, ty, tx, 14); g.fillRect(tx - 70, ty + 14, 12, H - ty - 14);
+  g.setLineDash([4, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1; g.beginPath(); g.moveTo(tx, 8); g.lineTo(tx, ty); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText('край стола', tx, H - 6);
+  // кирпичи: снизу вверх; рухнувшая группа поворачивается вокруг края опоры
+  const X = u => tx + u * Lp;
+  for (let k = S.n; k >= 1; k--) {
+    const y = ty - (S.n - k + 1) * bh, x0 = X(S.edge[k] - 1);
+    g.save();
+    if (S.fall && k <= S.fall) { const px = X(S.edge[S.fall + 1]), py = ty - (S.n - S.fall) * bh; g.translate(px, py); g.rotate(0.35); g.translate(-px, -py); }
+    g.fillStyle = S.fall && k <= S.fall ? '#fca5a5' : '#e07a5f'; g.strokeStyle = '#7c2d12'; g.lineWidth = 1.5;
+    g.fillRect(x0, y, Lp, bh); g.strokeRect(x0, y, Lp, bh);
+    g.restore();
+  }
+  // центры тяжести групп верхних кирпичей (только при устойчивой стопке)
+  if (!S.fall) for (let j = 1; j <= S.n; j++) { const y = ty - (S.n - j) * bh; g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(S.cg[j]), y, 3.5, 0, 7); g.fill(); }
+  // вылет
+  const yv = ty - S.n * bh - 18; g.strokeStyle = '#2563eb'; g.fillStyle = '#2563eb'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(tx, yv); g.lineTo(X(S.over), yv); g.stroke(); g.beginPath(); g.moveTo(X(S.over), yv - 5); g.lineTo(X(S.over), yv + 5); g.stroke();
+  g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('вылет ' + fmt(S.over) + ' L', Math.min(X(S.over) + 6, W - 90), yv + 4);
+  g.font = '600 14px system-ui'; g.fillStyle = S.fall ? '#dc2626' : '#16a34a'; g.textAlign = 'left';
+  g.fillText(S.fall ? (S.fall === S.n ? 'рушится вся стопка' : 'рушатся верхние кирпичи: ' + S.fall) : 'стопка стоит', 12, 22);
+  // показания
+  let Hn = 0; for (let k = 1; k <= S.n; k++) Hn += 1 / k;
+  $('no').textContent = S.n; $('fo').textContent = fmt(S.f) + (Math.abs(S.f - 1) < 1e-9 ? ' (оптимально)' : '');
+  $('read').innerHTML = ro('вылет', fmt(S.over) + ' L') + ro('при L = 24 см', fmt(S.over * 24, 1) + ' см') +
+    ro('оптимальный вылет', fmt(Hn / 2) + ' L') + ro('верхний кирпич за краем', S.over > 1 ? 'целиком' : 'частично', S.over > 1 ? 'ok' : '') +
+    ro('состояние', S.fall ? 'рушится' : 'стоит', S.fall ? 'bad' : 'ok');
+}
+['n', 'f'].forEach(id => $(id).oninput = draw);
+$('opt').onclick = () => { $('f').value = 1; draw(); };
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ракета и формула Циолковского</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .ok { color:#16a34a; } .no { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ракета и формула Циолковского</h1>
+  <p class="lead">Скорость ракеты вне поля тяжести: v = u · ln(m₀/m). Сравни ракеты с разным числом ступеней при одинаковой стартовой массе и одинаковом грузе.
+    Ступени делят поровну по отношению масс.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Скорость истечения газов u:<span id="uo"></span><input id="u" type="range" min="1" max="4.5" step="0.1" value="3"></label>
+      <label>Масса конструкции (доля от топлива):<span id="so"></span><input id="s" type="range" min="0.04" max="0.25" step="0.01" value="0.1"></label>
+      <label>Стартовая масса / полезный груз:<span id="Go"></span><input id="G" type="range" min="10" max="200" step="5" value="60"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>При скорости истечения 3 км/с и конструкции 10% может ли одноступенчатая ракета выйти на орбиту? А двухступенчатая?</li>
+      <li>Сделай конструкцию очень лёгкой, 4%. Нужны ли теперь ступени?</li>
+      <li>Сколько ступеней уже почти не даёт выигрыша? Почему?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const ORBIT = 7.9, REAL = 9.4;   // первая космическая и с учётом потерь на тяжесть и воздух, км/с
+function dv(N, u, s, G) {          // N одинаковых ступеней, общий рост массы G = m₀/груз
+  const rho = Math.pow(G, 1 / N), r = rho / (1 + s * (rho - 1) / (1 + s));
+  return N * u * Math.log(r);
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const u = +$('u').value, s = +$('s').value, G = +$('G').value;
+  const vals = [1, 2, 3, 4].map(N => dv(N, u, s, G));
+  const L = 44, R = 10, Tp = 20, B = 36, VM = 16, sy = v => H - B - v / VM * (H - Tp - B);
+  g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let v = 0; v <= VM; v += 2) { g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - R, sy(v)); g.stroke(); g.fillText(v, L - 4, sy(v) + 4); }
+  for (const [v, col, lab] of [[ORBIT, '#16a34a', 'первая космическая 7,9 км/с'], [REAL, '#b45309', 'с учётом потерь ≈ 9,4 км/с']]) {
+    g.strokeStyle = col; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - R, sy(v)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.textAlign = 'left'; g.fillText(lab, L + 4, sy(v) - 4); }
+  const bw = (W - L - R) / 4;
+  vals.forEach((v, i) => { const x = L + i * bw + bw * 0.2, w = bw * 0.6;
+    g.fillStyle = v >= REAL ? '#16a34a' : v >= ORBIT ? '#b45309' : '#94a3b8'; g.fillRect(x, sy(Math.min(v, VM)), w, sy(0) - sy(Math.min(v, VM)));
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText(fmt(v, 1) + ' км/с', x + w / 2, sy(Math.min(v, VM)) - 6);
+    g.font = '12px system-ui'; g.fillStyle = '#6b6b70'; g.fillText((i + 1) + (i ? ' ступени' : ' ступень'), x + w / 2, H - 14); });
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('скорость в конце работы, км/с', L, 12);
+  $('uo').textContent = fmt(u, 1) + ' км/с'; $('so').textContent = fmt(s * 100, 0) + ' %'; $('Go').textContent = G + ' : 1 (груз ' + fmt(100 / G, 1) + ' %)';
+  const best = vals.findIndex(v => v >= REAL);
+  $('read').innerHTML = ro('1 ступень', fmt(vals[0], 2) + ' км/с') + ro('2 ступени', fmt(vals[1], 2) + ' км/с') + ro('3 ступени', fmt(vals[2], 2) + ' км/с') +
+    ro('без конструкции: u·ln G', fmt(u * Math.log(G), 2) + ' км/с') + ro('выход на орбиту', best < 0 ? 'не хватает' : 'от ' + (best + 1) + ' ступ.', best < 0 ? 'no' : 'ok');
+}
+['u', 's', 'G'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

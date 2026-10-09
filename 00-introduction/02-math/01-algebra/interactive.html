@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Система уравнений на графике</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --l1:#2563eb; --l2:#dc2626; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  .l1 { color:var(--l1); } .l2 { color:var(--l2); }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(11em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Система уравнений на графике</h1>
+  <p class="lead">Каждое линейное уравнение — прямая. Решение системы — точка, которая лежит на обеих прямых сразу.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label class="l1">Наклон k₁:<span id="k1o"></span><input id="k1" type="range" min="-3" max="3" step="0.25" value="1"></label>
+      <label class="l1">Сдвиг b₁:<span id="b1o"></span><input id="b1" type="range" min="-6" max="6" step="0.5" value="1"></label>
+      <label class="l2">Наклон k₂:<span id="k2o"></span><input id="k2" type="range" min="-3" max="3" step="0.25" value="-1"></label>
+      <label class="l2">Сдвиг b₂:<span id="b2o"></span><input id="b2" type="range" min="-6" max="6" step="0.5" value="5"></label>
+    </div>
+    <div class="row"><button class="tog" id="phys">Физический смысл: встреча двух тел</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Задай две прямые, пересекающиеся в точке (2; 3). Проверь ответ подстановкой в оба уравнения.</li>
+      <li>Сделай прямые параллельными. Что происходит с решением? Какое условие на коэффициенты?</li>
+      <li>Включи физический смысл. Что означают наклоны, сдвиги и точка пересечения, если прямые — графики движения x(t)?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let phys = false;
+const P = () => ({ k1: +$('k1').value, b1: +$('b1').value, k2: +$('k2').value, b2: +$('b2').value });
+const eq = (k, b, X, Y) => `${Y} = ${k === 0 ? '' : (k === 1 ? '' : k === -1 ? '−' : fmt(k)) + X}${k === 0 ? fmt(b) : b === 0 ? '' : (b < 0 ? ' − ' : ' + ') + fmt(Math.abs(b))}`;
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const { k1, b1, k2, b2 } = P(), X0 = phys ? 0 : -6, X1 = phys ? 8 : 6, Y0 = -8, Y1 = 8;
+  const sx = x => (x - X0) / (X1 - X0) * W, sy = y => (Y1 - y) / (Y1 - Y0) * H;
+  const X = phys ? 't' : 'x', Y = phys ? 'x' : 'y';
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = X0; x <= X1; x++) { g.beginPath(); g.moveTo(sx(x), 0); g.lineTo(sx(x), H); g.stroke(); if (x) g.fillText(x, sx(x), sy(0) + 14); }
+  for (let y = Y0; y <= Y1; y += 2) { g.beginPath(); g.moveTo(0, sy(y)); g.lineTo(W, sy(y)); g.stroke(); if (y) g.fillText(y, sx(0) + (phys ? 12 : -10), sy(y) + 4); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(0, sy(0)); g.lineTo(W, sy(0)); g.moveTo(sx(0), 0); g.lineTo(sx(0), H); g.stroke();
+  g.font = 'italic 14px serif'; g.fillStyle = '#6b6b70'; g.fillText(X + (phys ? ', с' : ''), W - 14, sy(0) - 6); g.fillText(Y + (phys ? ', м' : ''), sx(0) + 22, 14);
+  for (const [k, b, col] of [[k1, b1, '#2563eb'], [k2, b2, '#dc2626']]) {
+    g.strokeStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(sx(X0), sy(k * X0 + b)); g.lineTo(sx(X1), sy(k * X1 + b)); g.stroke();
+  }
+  let sol;
+  if (k1 === k2) sol = b1 === b2 ? (phys ? 'тела всё время вместе' : 'бесконечно много: прямые совпадают') : (phys ? 'не встретятся: скорости равны' : 'нет: прямые параллельны');
+  else {
+    const xs = (b2 - b1) / (k1 - k2), ys = k1 * xs + b1;
+    g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(sx(xs), sy(ys), 6, 0, 7); g.fill();
+    g.setLineDash([3, 4]); g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath();
+    g.moveTo(sx(xs), sy(ys)); g.lineTo(sx(xs), sy(0)); g.moveTo(sx(xs), sy(ys)); g.lineTo(sx(0), sy(ys)); g.stroke(); g.setLineDash([]);
+    sol = phys ? (xs < 0 ? `встреча была бы при t = ${fmt(xs)} с — до начала` : `t = ${fmt(xs)} с, x = ${fmt(ys)} м`) : `(${fmt(xs)}; ${fmt(ys)})`;
+  }
+  $('k1o').textContent = fmt(k1) + (phys ? ' м/с' : ''); $('b1o').textContent = fmt(b1) + (phys ? ' м' : '');
+  $('k2o').textContent = fmt(k2) + (phys ? ' м/с' : ''); $('b2o').textContent = fmt(b2) + (phys ? ' м' : '');
+  $('read').innerHTML = ro(phys ? 'закон движения первого' : 'первое уравнение', eq(k1, b1, X, Y), 'l1') +
+    ro(phys ? 'закон движения второго' : 'второе уравнение', eq(k2, b2, X, Y), 'l2') + ro(phys ? 'встреча' : 'решение системы', sol);
+}
+
+$('phys').onclick = () => { phys = !phys; $('phys').classList.toggle('on', phys); draw(); };
+document.querySelectorAll('input[type=range]').forEach(i => i.oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

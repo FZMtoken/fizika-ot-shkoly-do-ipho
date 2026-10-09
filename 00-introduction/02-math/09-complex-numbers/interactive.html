@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Комплексные числа</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; touch-action:none; }
+  .z1 { color:#2563eb; } .z2 { color:#16a34a; } .zs { color:#dc2626; } .zp { color:#9333ea; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off], .tog[data-off] { visibility:hidden; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(12em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Комплексные числа</h1>
+  <p class="lead">Комплексное число — вектор на плоскости. Сложение — сложение векторов, умножение — поворот и растяжение.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="mode"><button data-m="ops" class="on">Действия</button><button data-m="osc">Сложение колебаний</button></div>
+      <button class="tog on" id="bSum">Сумма</button>
+      <button class="tog on" id="bProd">Произведение</button>
+    </div>
+    <div class="controls">
+      <label class="slot" id="sA1">Амплитуда A₁:<span id="a1o"></span><input id="a1" type="range" min="0" max="2" step="0.1" value="1"></label>
+      <label class="slot" id="sA2">Амплитуда A₂:<span id="a2o"></span><input id="a2" type="range" min="0" max="2" step="0.1" value="1"></label>
+      <label class="slot" id="sPh">Разность фаз Δφ:<span id="pho"></span><input id="ph" type="range" min="0" max="360" step="5" value="90"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>В режиме «Действия» тяни концы векторов z₁ и z₂. Как связаны модули и аргументы множителей и произведения?</li>
+      <li>Поставь z₂ = i, то есть точку (0; 1). Куда поворачивается z₁ при умножении?</li>
+      <li>В режиме «Сложение колебаний» найди разность фаз, при которой колебания гасят друг друга.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const zs = ([a, b]) => `${fmt(a)} ${b < 0 ? '−' : '+'} ${fmt(Math.abs(b))}i`;
+const mod = ([a, b]) => Math.hypot(a, b), arg = ([a, b]) => { let d = Math.atan2(b, a) * 180 / Math.PI; return d < 0 ? d + 360 : d; };
+let mode = 'ops', showSum = true, showProd = true, drag = null, geo = null, t = 0, running = true, last = null;
+const z = { z1: [1.5, 0.5], z2: [0.5, 1] };
+
+function arrow(g, x1, y1, x2, y2, col, lab, w = 2.5, dash) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 2) return;
+  const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = w; g.setLineDash(dash || []);
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = 'italic 600 14px serif'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14 + uy * 10, y2 + uy * 14 - ux * 10 + 4); }
+}
+
+function drawOps(g, W, H) {
+  const k = Math.min(W, H) / 7.5, cx = W / 2, cy = H / 2; geo = { k, cx, cy };
+  const P = ([a, b]) => [cx + a * k, cy - b * k];
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1;
+  for (let x = -6; x <= 6; x++) { g.beginPath(); g.moveTo(cx + x * k, 0); g.lineTo(cx + x * k, H); g.stroke(); }
+  for (let y = -4; y <= 4; y++) { g.beginPath(); g.moveTo(0, cy + y * k); g.lineTo(W, cy + y * k); g.stroke(); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(0, cy); g.lineTo(W, cy); g.moveTo(cx, 0); g.lineTo(cx, H); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = 'italic 14px serif'; g.textAlign = 'left'; g.fillText('Re', W - 24, cy - 6); g.fillText('Im', cx + 6, 14);
+  g.strokeStyle = '#ddd'; g.beginPath(); g.arc(cx, cy, k, 0, 7); g.stroke();
+  const a = z.z1, b = z.z2, s = [a[0] + b[0], a[1] + b[1]], p = [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+  if (showSum) { const [ax, ay] = P(a), [sx, sy] = P(s); arrow(g, ax, ay, sx, sy, 'rgba(22,163,74,.5)', '', 1.5, [5, 4]); arrow(g, cx, cy, sx, sy, '#dc2626', 'z₁+z₂'); }
+  if (showProd) { const [px, py] = P(p); arrow(g, cx, cy, px, py, '#9333ea', 'z₁·z₂'); }
+  arrow(g, cx, cy, ...P(a), '#2563eb', 'z₁'); arrow(g, cx, cy, ...P(b), '#16a34a', 'z₂');
+  for (const v of [a, b]) { const [x, y] = P(v); g.fillStyle = '#fff'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill(); g.stroke(); }
+  $('read').innerHTML = ro('z₁', `${zs(a)} = ${fmt(mod(a))}·e^(i·${fmt(arg(a), 0)}°)`, 'z1') + ro('z₂', `${zs(b)} = ${fmt(mod(b))}·e^(i·${fmt(arg(b), 0)}°)`, 'z2') +
+    ro('z₁ + z₂', zs(s), 'zs') + ro('z₁ · z₂', `${zs(p)} = ${fmt(mod(p))}·e^(i·${fmt(arg(p), 0)}°)`, 'zp') +
+    ro('|z₁|·|z₂| и arg z₁ + arg z₂', `${fmt(mod(a) * mod(b))} и ${fmt((arg(a) + arg(b)) % 360, 0)}°`);
+}
+
+function drawOsc(g, W, H) {
+  const A1 = +$('a1').value, A2 = +$('a2').value, dp = +$('ph').value * Math.PI / 180, w = 2;
+  const R = Math.min(H * 0.42, W * 0.18), cx = R * 1.15 + 10, cy = H / 2, sc = R / 2.2;
+  const th = w * t, v1 = [A1 * Math.cos(th), A1 * Math.sin(th)], v2 = [A2 * Math.cos(th + dp), A2 * Math.sin(th + dp)], vs = [v1[0] + v2[0], v1[1] + v2[1]];
+  // действительная ось направлена вверх: проекция конца вектора на неё — значение x(t) на графике справа
+  const P = ([a, b]) => [cx - b * sc, cy - a * sc];
+  g.fillStyle = '#6b6b70'; g.font = 'italic 13px serif'; g.textAlign = 'left'; g.fillText('Re', cx + 6, cy - R * 1.05); g.fillText('Im', cx - R * 1.1, cy - 6);
+  g.strokeStyle = '#999'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx - R * 1.1, cy); g.lineTo(cx + R * 1.1, cy); g.moveTo(cx, cy - R * 1.1); g.lineTo(cx, cy + R * 1.1); g.stroke();
+  arrow(g, cx, cy, ...P(v1), '#2563eb', 'A₁'); arrow(g, ...P(v1), ...P(vs), 'rgba(22,163,74,.9)', 'A₂'); arrow(g, cx, cy, ...P(vs), '#dc2626', 'A');
+  // график: действительные части от времени
+  const gx0 = cx + R * 1.3, gx1 = W - 10, T = 2 * Math.PI / w * 2, sy = v => cy - v * sc;
+  g.strokeStyle = '#ecece6'; g.beginPath(); g.moveTo(gx0, cy); g.lineTo(gx1, cy); g.stroke();
+  const line = (f, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (let i = 0; i <= 300; i++) { const tt = t - T * (1 - i / 300);
+    const x = gx0 + (gx1 - gx0) * i / 300; i ? g.lineTo(x, sy(f(tt))) : g.moveTo(x, sy(f(tt))); } g.stroke(); };
+  line(tt => A1 * Math.cos(w * tt), 'rgba(37,99,235,.6)', 1.5); line(tt => A2 * Math.cos(w * tt + dp), 'rgba(22,163,74,.6)', 1.5);
+  line(tt => A1 * Math.cos(w * tt) + A2 * Math.cos(w * tt + dp), '#dc2626', 2.5);
+  g.strokeStyle = '#1d1d1f'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(P(vs)[0], P(vs)[1]); g.lineTo(gx1, sy(vs[0])); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('x(t) = Re A·e^(iωt)', gx0 + 4, 16);
+  const A = Math.sqrt(A1 * A1 + A2 * A2 + 2 * A1 * A2 * Math.cos(dp));
+  $('read').innerHTML = ro('амплитуда суммы A', fmt(A, 3), 'zs') + ro('формула', '√(A₁² + A₂² + 2A₁A₂cos Δφ)') +
+    ro('A₁ + A₂ (фазы совпадают)', fmt(A1 + A2)) + ro('|A₁ − A₂| (фазы противоположны)', fmt(Math.abs(A1 - A2))) + ro('ω', '2 рад/с');
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  // подписи ползунков заполнены в обоих режимах, чтобы высота блока не менялась
+  $('a1o').textContent = fmt(+$('a1').value, 1); $('a2o').textContent = fmt(+$('a2').value, 1); $('pho').textContent = $('ph').value + '°';
+  mode === 'ops' ? drawOps(g, W, H) : drawOsc(g, W, H);
+}
+function tick(ts) { if (last !== null && mode === 'osc') t += (ts - last) / 1000; last = ts; if (mode === 'osc') draw(); if (running) requestAnimationFrame(tick); }
+
+$('c').addEventListener('pointerdown', e => {
+  if (mode !== 'ops') return;
+  const b = $('c').getBoundingClientRect(), p = [e.clientX - b.left, e.clientY - b.top]; let best = null, bd = 24;
+  for (const n of ['z1', 'z2']) { const x = geo.cx + z[n][0] * geo.k, y = geo.cy - z[n][1] * geo.k, d = Math.hypot(x - p[0], y - p[1]); if (d < bd) { bd = d; best = n; } }
+  if (best) { drag = best; $('c').setPointerCapture(e.pointerId); }
+});
+$('c').addEventListener('pointermove', e => {
+  if (!drag) return; const b = $('c').getBoundingClientRect();
+  const a = Math.round((e.clientX - b.left - geo.cx) / geo.k * 4) / 4, bb = Math.round(-(e.clientY - b.top - geo.cy) / geo.k * 4) / 4;
+  z[drag] = [Math.max(-3, Math.min(3, a)), Math.max(-3, Math.min(3, bb))]; draw();
+});
+$('c').addEventListener('pointerup', () => drag = null);
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m;
+  const ops = mode === 'ops'; ['sA1', 'sA2', 'sPh'].forEach(id => $(id).toggleAttribute('data-off', ops)); ['bSum', 'bProd'].forEach(id => $(id).toggleAttribute('data-off', !ops));
+  draw();
+});
+$('bSum').onclick = () => { showSum = !showSum; $('bSum').classList.toggle('on', showSum); draw(); };
+$('bProd').onclick = () => { showProd = !showProd; $('bProd').classList.toggle('on', showProd); draw(); };
+['a1', 'a2', 'ph'].forEach(id => $(id).oninput = draw);
+['sA1', 'sA2', 'sPh'].forEach(id => $(id).toggleAttribute('data-off', true));
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

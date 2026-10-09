@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тригонометрическая окружность</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .tog { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; touch-action:none; }
+  .sin { color:#dc2626; } .cos { color:#2563eb; } .tg { color:#16a34a; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(8.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Тригонометрическая окружность</h1>
+  <p class="lead">Точка на окружности радиусом 1: её координата x — это <b class="cos">cos α</b>, координата y — <b class="sin">sin α</b>.
+    Тяни точку или двигай ползунок.</p>
+
+  <div class="card">
+    <label>Угол α: <span id="ao"></span><input id="a" type="range" min="0" max="360" step="any" value="30"></label>
+    <div class="row">
+      <button class="tog" data-set="0">0°</button><button class="tog" data-set="30">30°</button>
+      <button class="tog" data-set="45">45°</button><button class="tog" data-set="60">60°</button>
+      <button class="tog" data-set="90">90°</button><button class="tog" data-set="57.2958">1 рад</button>
+      <button class="tog" id="tgBtn">Показать тангенс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="400"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Найди угол, при котором sin α = cos α.</li>
+      <li>Найди все углы от 0° до 360°, при которых синус отрицателен. А косинус?</li>
+      <li>Нажми «1 рад». Сравни длину оранжевой дуги с радиусом.</li>
+      <li>Включи тангенс. При каких углах он не существует? Что происходит с зелёным отрезком около этих углов?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 3) => !isFinite(n) ? '—' : (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let showTg = false, geo = null, drag = false;
+const deg = () => +$('a').value, rad = () => deg() * Math.PI / 180;
+
+function arrowHead(g, x, y, ang, col) {
+  g.fillStyle = col; g.beginPath(); g.moveTo(x, y);
+  g.lineTo(x - 10 * Math.cos(ang - .4), y - 10 * Math.sin(ang - .4)); g.lineTo(x - 10 * Math.cos(ang + .4), y - 10 * Math.sin(ang + .4)); g.fill();
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const wide = W >= 640;
+  // панель окружности и панель графика
+  const cw = wide ? Math.min(W * .45, H) : W, ch = wide ? H : H * .55;
+  const R = Math.min(cw, ch) * .36, cx = cw / 2, cy = ch / 2;
+  geo = { cx, cy, R };
+  const a = rad(), co = Math.cos(a), si = Math.sin(a), X = cx + R * co, Y = cy - R * si;
+
+  // оси и окружность
+  g.strokeStyle = '#ccc'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(cx - R * 1.35, cy); g.lineTo(cx + R * 1.35, cy); g.moveTo(cx, cy - R * 1.35); g.lineTo(cx, cy + R * 1.35); g.stroke();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center';
+  g.fillText('1', cx + R + 8, cy + 14); g.fillText('−1', cx - R - 10, cy + 14); g.fillText('1', cx - 10, cy - R - 4); g.fillText('−1', cx - 12, cy + R + 14);
+
+  // дуга угла (оранжевая — её длина равна углу в радианах)
+  g.strokeStyle = '#f59e0b'; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, R, 0, -a, true); g.stroke();
+  g.strokeStyle = '#f59e0b'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, R * .22, 0, -a, true); g.stroke();
+
+  // тангенс: отрезок на касательной x = 1
+  if (showTg && Math.abs(co) > 1e-6) {
+    const t = si / co, ty = cy - R * Math.max(-3, Math.min(3, t));
+    g.strokeStyle = '#16a34a'; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(cx + R, cy - R * 3); g.lineTo(cx + R, cy + R * 3); g.stroke();
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + R, ty); g.stroke(); g.setLineDash([]);
+    g.lineWidth = 4; g.beginPath(); g.moveTo(cx + R, cy); g.lineTo(cx + R, ty); g.stroke();
+  }
+  // радиус, проекции
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(X, Y); g.stroke();
+  g.strokeStyle = '#2563eb'; g.lineWidth = 4; g.beginPath(); g.moveTo(cx, cy); g.lineTo(X, cy); g.stroke();
+  g.strokeStyle = '#dc2626'; g.beginPath(); g.moveTo(X, cy); g.lineTo(X, Y); g.stroke();
+  g.fillStyle = '#fff'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(X, Y, 7, 0, 7); g.fill(); g.stroke();
+  g.font = 'italic 600 14px serif'; g.fillStyle = '#2563eb'; g.fillText('cos α', (cx + X) / 2, cy + (si >= 0 ? 16 : -8));
+  g.fillStyle = '#dc2626'; g.textAlign = co >= 0 ? 'left' : 'right'; g.fillText('sin α', X + (co >= 0 ? 8 : -8), (cy + Y) / 2 + 4);
+
+  // график синуса и косинуса от 0 до 360°
+  const gx0 = wide ? cw + 30 : 36, gx1 = W - 10, gy0 = wide ? 30 : ch + 12, gy1 = H - 24;
+  const gsx = d => gx0 + d / 360 * (gx1 - gx0), gsy = v => (gy0 + gy1) / 2 - v * (gy1 - gy0) / 2 * .9;
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let d = 0; d <= 360; d += 90) { g.beginPath(); g.moveTo(gsx(d), gy0); g.lineTo(gsx(d), gy1); g.stroke(); g.fillText(d + '°', gsx(d), gy1 + 14); }
+  g.textAlign = 'right'; for (const v of [-1, 0, 1]) { g.fillText(v === -1 ? '−1' : v, gx0 - 5, gsy(v) + 4); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(gx0, gsy(0)); g.lineTo(gx1, gsy(0)); g.stroke();
+  for (const [f, col] of [[Math.sin, '#dc2626'], [Math.cos, '#2563eb']]) {
+    g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+    for (let d = 0; d <= 360; d += 2) { const v = f(d * Math.PI / 180); d ? g.lineTo(gsx(d), gsy(v)) : g.moveTo(gsx(d), gsy(v)); }
+    g.stroke();
+  }
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(gsx(deg()), gy0); g.lineTo(gsx(deg()), gy1); g.stroke(); g.setLineDash([]);
+  for (const [v, col] of [[si, '#dc2626'], [co, '#2563eb']]) { g.fillStyle = col; g.beginPath(); g.arc(gsx(deg()), gsy(v), 5, 0, 7); g.fill(); }
+
+  const tg = Math.abs(co) < 1e-9 ? NaN : si / co;
+  $('ao').textContent = fmt(deg(), 1) + '°';
+  $('read').innerHTML = ro('угол, градусы', fmt(deg(), 1) + '°') + ro('угол, радианы', fmt(rad(), 3) + ' рад') +
+    ro('sin α', fmt(si), 'sin') + ro('cos α', fmt(co), 'cos') + ro('tg α', isNaN(tg) ? 'не существует' : fmt(tg), 'tg') +
+    ro('sin²α + cos²α', fmt(si * si + co * co));
+}
+
+function pick(e) {
+  const b = $('c').getBoundingClientRect(), x = e.clientX - b.left - geo.cx, y = -(e.clientY - b.top - geo.cy);
+  let d = Math.atan2(y, x) * 180 / Math.PI; if (d < 0) d += 360;
+  $('a').value = Math.round(d); draw();
+}
+$('c').addEventListener('pointerdown', e => {
+  const b = $('c').getBoundingClientRect(), x = e.clientX - b.left - geo.cx, y = e.clientY - b.top - geo.cy;
+  if (Math.hypot(x, y) < geo.R * 1.4) { drag = true; $('c').setPointerCapture(e.pointerId); pick(e); }
+});
+$('c').addEventListener('pointermove', e => { if (drag) pick(e); });
+$('c').addEventListener('pointerup', () => drag = false);
+document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { $('a').value = b.dataset.set; draw(); });
+$('tgBtn').onclick = () => { showTg = !showTg; $('tgBtn').classList.toggle('on', showTg); draw(); };
+$('a').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

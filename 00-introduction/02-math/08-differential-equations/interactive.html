@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метод Эйлера</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 14px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .eq { font-family: "Cambria Math", "Times New Roman", serif; font-size:1.15rem; margin:10px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .num { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Метод Эйлера</h1>
+  <p class="lead">Чёрная линия — точное решение уравнения, <b class="num">красные точки</b> — численное решение шагами Δt.
+    Уменьшай шаг и смотри, как точки ложатся на кривую.</p>
+
+  <div class="card">
+    <div class="seg" id="mode">
+      <button data-m="decay" class="on">Распад</button><button data-m="osc">Осциллятор</button><button data-m="drag">Падение с сопротивлением</button>
+    </div>
+    <p class="eq" id="eq"></p>
+    <div class="controls">
+      <label>Шаг Δt:<span id="dto"></span><input id="dt" type="range" min="0" max="100" step="1" value="70"></label>
+      <label><i id="plab">Параметр</i>:<span id="po"></span><input id="p" type="range" min="0.2" max="2" step="0.1" value="0.5"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Для распада уменьши шаг в 10 раз. Во сколько раз уменьшилась ошибка?</li>
+      <li>Для осциллятора с большим шагом посмотри на амплитуду. Почему метод Эйлера её «раскачивает»?</li>
+      <li>Для падения с сопротивлением найди установившуюся скорость и сравни с g/k.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 3) => !isFinite(n) ? '—' : (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const G = 10, TEND = 10;
+let mode = 'decay';
+const dt = () => 0.01 * Math.pow(100, +$('dt').value / 100);      // от 0,01 до 1 с, логарифмически
+const P = () => +$('p').value;
+const M = {
+  decay: { eq: k => `dy/dt = −${fmt(k, 1)}·y,   y(0) = 1`, plab: 'Постоянная k, 1/с', exact: (t, k) => Math.exp(-k * t),
+           step: (s, h, k) => ({ y: s.y - k * s.y * h }), init: () => ({ y: 1 }), val: s => s.y, name: 'y' },
+  osc:   { eq: w => `d²x/dt² = −${fmt(w * w, 2)}·x,   x(0) = 1,  v(0) = 0`, plab: 'Частота ω, рад/с', exact: (t, w) => Math.cos(w * t),
+           step: (s, h, w) => ({ y: s.y + s.v * h, v: s.v - w * w * s.y * h }), init: () => ({ y: 1, v: 0 }), val: s => s.y, name: 'x' },
+  drag:  { eq: k => `dv/dt = 10 − ${fmt(k, 1)}·v,   v(0) = 0`, plab: 'Коэффициент k, 1/с', exact: (t, k) => G / k * (1 - Math.exp(-k * t)),
+           step: (s, h, k) => ({ y: s.y + (G - k * s.y) * h }), init: () => ({ y: 0 }), val: s => s.y, name: 'v' },
+};
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const m = M[mode], p = P(), h = dt();
+  // численное решение
+  const pts = []; let s = m.init(), t = 0; pts.push([0, m.val(s)]);
+  while (t < TEND - 1e-9) { const hh = Math.min(h, TEND - t); s = m.step(s, hh, p); t += hh; pts.push([t, m.val(s)]); }
+  let y0, y1;
+  if (mode === 'decay') { y0 = -0.1; y1 = 1.1; } else if (mode === 'osc') { const amp = Math.max(1.2, ...pts.map(q => Math.abs(q[1]))); y0 = -Math.min(amp, 4); y1 = Math.min(amp, 4); }
+  else { y0 = -1; y1 = Math.max(G / p, ...pts.map(q => q[1])) * 1.1; }
+  const L = 44, R = 10, Tp = 10, B = 24, sx = tt => L + tt / TEND * (W - L - R), sy = v => Tp + (y1 - v) / (y1 - y0) * (H - Tp - B);
+  g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let k = 0; k <= TEND; k += 1) { g.beginPath(); g.moveTo(sx(k), Tp); g.lineTo(sx(k), H - B); g.stroke(); g.fillText(k, sx(k), H - 8); }
+  const ys = (y1 - y0) > 20 ? 10 : (y1 - y0) > 8 ? 2 : (y1 - y0) > 3 ? 1 : 0.5;
+  g.textAlign = 'right';
+  for (let v = Math.ceil(y0 / ys) * ys; v <= y1; v += ys) { g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - R, sy(v)); g.stroke(); g.fillText(fmt(v, 1), L - 4, sy(v) + 4); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, sy(0)); g.lineTo(W - R, sy(0)); g.stroke();
+  g.save(); g.beginPath(); g.rect(L, Tp, W - L - R, H - Tp - B); g.clip();
+  if (mode === 'drag') { g.strokeStyle = '#16a34a'; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(L, sy(G / p)); g.lineTo(W - R, sy(G / p)); g.stroke(); g.setLineDash([]); }
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2.5; g.beginPath();
+  for (let i = 0; i <= 400; i++) { const tt = TEND * i / 400; i ? g.lineTo(sx(tt), sy(m.exact(tt, p))) : g.moveTo(sx(tt), sy(m.exact(tt, p))); }
+  g.stroke();
+  g.strokeStyle = 'rgba(220,38,38,.6)'; g.lineWidth = 1.5; g.beginPath(); pts.forEach(([tt, v], i) => i ? g.lineTo(sx(tt), sy(v)) : g.moveTo(sx(tt), sy(v))); g.stroke();
+  if (pts.length <= 200) { g.fillStyle = '#dc2626'; for (const [tt, v] of pts) { g.beginPath(); g.arc(sx(tt), sy(v), 3, 0, 7); g.fill(); } }
+  g.restore();
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(m.name + '(t)', L + 6, Tp + 14);
+  g.font = '11px system-ui'; g.textAlign = 'right'; g.fillText('t, с', W - R, H - 8);
+
+  const tChk = mode === 'osc' ? TEND : 2;   // момент сравнения
+  let sc = m.init(), tc = 0; while (tc < tChk - 1e-9) { const hh = Math.min(h, tChk - tc); sc = m.step(sc, hh, p); tc += hh; }
+  const ex = m.exact(tChk, p), nu = m.val(sc);
+  $('eq').textContent = m.eq(p); $('plab').textContent = m.plab; $('po').textContent = fmt(p, 1);
+  $('dto').textContent = fmt(h, 3) + ' с';
+  $('read').innerHTML = ro('шагов до t = 10 с', String(pts.length - 1)) + ro(`точно ${m.name}(${tChk})`, fmt(ex)) + ro(`Эйлер ${m.name}(${tChk})`, fmt(nu), 'num') +
+    ro('ошибка', fmt(Math.abs(nu - ex), 4)) + ro(mode === 'drag' ? 'g / k' : mode === 'osc' ? 'период 2π/ω' : 'полураспад ln2/k', fmt(mode === 'drag' ? G / p : mode === 'osc' ? 2 * Math.PI / p : Math.LN2 / p, 3));
+}
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); mode = b.dataset.m;
+  $('p').value = mode === 'osc' ? 2 : 0.5; draw();
+});
+['dt', 'p'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

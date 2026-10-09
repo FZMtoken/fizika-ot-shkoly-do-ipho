@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Первый закон термодинамики</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Первый закон термодинамики</h1>
+  <p class="lead">1 моль гелия выходит из состояния 1 (10 л, 200 кПа). Выбери процесс и конечное состояние. Закрашенная площадь — работа газа A′. Справа столбики: теплота Q, изменение внутренней энергии ΔU и работа A′; всегда Q = ΔU + A′. «Пуск» проводит процесс туда и обратно.</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="p" class="on">Изобара</button><button data-k="V">Изохора</button><button data-k="T">Изотерма</button></div>
+    <div class="controls">
+      <label><i id="xl"></i><span id="xo"></span><input id="x" type="range" min="0" max="100" step="1" value="70"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Изобара: расширь газ до 20 л. Какая доля теплоты пошла на работу? Сравни с примером 1.</li>
+      <li>Изохора: чему равна работа? Нагрей и охлади газ — куда идёт теплота?</li>
+      <li>Изотерма: сожми газ. Почему газ отдаёт теплоту, хотя его температура не меняется?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31, V1 = 10, P1 = 200, VMAX = 35, PMAX = 450;     // л, кПа; кПа·л = Дж
+const RANGE = { p: [4, 30], V: [50, 400], T: [5, 30] };
+let kind = 'p', t = 0, running = false, last = null;
+const sx = () => 50 + 50 * Math.sin(t * 0.8);              // положение при анимации, 0…100
+
+function st() {
+  const [lo, hi] = RANGE[kind], s = running ? sx() : +$('x').value;
+  const x = lo + (hi - lo) * s / 100;
+  if (kind === 'p') return { V: x, p: P1, A: P1 * (x - V1) };
+  if (kind === 'V') return { V: V1, p: x, A: 0 };
+  return { V: x, p: P1 * V1 / x, A: P1 * V1 * Math.log(x / V1) };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const s = st(), dU = 1.5 * (s.p * s.V - P1 * V1), Q = dU + s.A;
+  const bw = Math.max(170, W * 0.32), x0 = 44, y0 = 14, w = W - bw - x0 - 30, h = H - 46;
+  const X = v => x0 + w * v / VMAX, Y = p => y0 + h - h * p / PMAX;
+  // оси
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let v = 5; v <= 30; v += 5) g.fillText(v, X(v), y0 + h + 14);
+  g.textAlign = 'right'; for (let p = 100; p <= 400; p += 100) g.fillText(p, x0 - 4, Y(p) + 4);
+  g.fillText('V, л', x0 + w, y0 + h + 28); g.textAlign = 'left'; g.fillText('p, кПа', x0 + 4, y0 + 10);
+  // изотермы для ориентира
+  g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  g.strokeStyle = '#e2e8f0'; g.lineWidth = 1;
+  [1000, 2000, 4000, 6000].forEach(pv => { g.beginPath(); for (let v = 2; v <= VMAX; v += 0.5) v > 2 ? g.lineTo(X(v), Y(pv / v)) : g.moveTo(X(v), Y(pv / v)); g.stroke(); });
+  // процесс и площадь
+  const path = n => { const pts = []; for (let j = 0; j <= n; j++) { const f = j / n;
+    if (kind === 'p') pts.push([V1 + (s.V - V1) * f, P1]); else if (kind === 'V') pts.push([V1, P1 + (s.p - P1) * f]); else { const v = V1 + (s.V - V1) * f; pts.push([v, P1 * V1 / v]); } } return pts; };
+  const pts = path(80);
+  if (kind !== 'V') { g.fillStyle = s.A >= 0 ? 'rgba(37,99,235,.18)' : 'rgba(220,38,38,.18)'; g.beginPath(); g.moveTo(X(V1), Y(0)); pts.forEach(([v, p]) => g.lineTo(X(v), Y(p))); g.lineTo(X(s.V), Y(0)); g.closePath(); g.fill(); }
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2.5; g.beginPath(); pts.forEach(([v, p], j) => j ? g.lineTo(X(v), Y(p)) : g.moveTo(X(v), Y(p))); g.stroke();
+  g.restore();
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(X(V1), Y(P1), 4, 0, 7); g.fill(); g.font = '12px system-ui'; g.fillText('1', X(V1) - 12, Y(P1) - 6);
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(s.V), Y(s.p), 6, 0, 7); g.fill();
+  // столбики
+  const bx = W - bw, mid = y0 + h / 2, sc = (h / 2 - 16) / 10000, bars = [['Q', Q, '#dc2626'], ['ΔU', dU, '#16a34a'], ['A′', s.A, '#2563eb']], step = bw / 3;
+  g.strokeStyle = '#94a3b8'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, mid); g.lineTo(W - 4, mid); g.stroke();
+  g.textAlign = 'center'; g.font = '13px system-ui';
+  bars.forEach(([l, v, col], i) => { const xx = bx + step * i + step * 0.2, bh = Math.max(-h / 2 + 14, Math.min(h / 2 - 14, v * sc));
+    g.fillStyle = col; g.fillRect(xx, mid - Math.max(bh, 0), step * 0.6, Math.abs(bh)); g.fillStyle = '#1d1d1f';
+    g.fillText(l, xx + step * 0.3, bh >= 0 ? mid + 16 : mid - 6); });
+  g.font = '11px system-ui'; g.fillStyle = '#334155'; g.fillText('Q = ΔU + A′', bx + bw / 2, y0 + 10);
+  $('xl').textContent = kind === 'V' ? 'Конечное давление p₂' : 'Конечный объём V₂'; $('xo').textContent = kind === 'V' ? fmt(s.p, 0) + ' кПа' : fmt(s.V, 1) + ' л';
+  $('read').innerHTML = ro('температура T₁ → T₂', fmt(P1 * V1 / R, 0) + ' → ' + fmt(s.p * s.V / R, 0) + ' К') + ro('работа газа A′', fmt(s.A, 0) + ' Дж') +
+    ro('изменение ΔU', fmt(dU, 0) + ' Дж') + ro('теплота Q', fmt(Q, 0) + ' Дж') + ro('газ теплоту', Math.abs(Q) < 0.5 ? '—' : Q > 0 ? 'получает' : 'отдаёт');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('x').value = Math.round(sx()); running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) { t = Math.asin(Math.max(-1, Math.min(1, (+$('x').value - 50) / 50))) / 0.8; requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('x').value = 70; t = 0; draw(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; $('x').value = 70; draw(); });
+$('x').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лестница у стены</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Лестница у стены</h1>
+  <p class="lead">Нижний конец оттаскивают от стены с постоянной скоростью. Синие стрелки — скорости концов, фиолетовая точка — мгновенный центр скоростей.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Длина лестницы L:<span id="Lo"></span><input id="L" type="range" min="3" max="6" step="0.5" value="5"></label>
+      <label>Скорость нижнего конца u:<span id="uo"></span><input id="u" type="range" min="0.2" max="1.5" step="0.1" value="0.6"></label>
+      <label>Расстояние от стены x:<span id="xo"></span><input id="x" type="range" min="0.2" max="5.9" step="0.01" value="3"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button class="tog on" id="icr">Мгновенный центр</button>
+      <button class="tog" id="trace">След середины</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Запусти движение. Как меняется скорость верхнего конца по мере того, как лестница опускается?</li>
+      <li>Проверь, что скорости концов перпендикулярны отрезкам, проведённым к мгновенному центру.</li>
+      <li>Включи след середины. По какой линии она движется? Где центр этой линии?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let running = false, last = null, showIcr = true, showTrace = false;
+const L = () => +$('L').value, u = () => +$('u').value;
+const X = () => Math.min(+$('x').value, L() * 0.99);
+
+function arrow(g, x1, y1, x2, y2, col, lab) {
+  const Ln = Math.hypot(x2 - x1, y2 - y1); if (Ln < 3) return;
+  const ux = (x2 - x1) / Ln, uy = (y2 - y1) / Ln;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = 'italic 600 14px serif'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14 + 8, y2 + uy * 14 + 4); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const Lh = L(), x = X(), y = Math.sqrt(Lh * Lh - x * x);
+  const ox = 50, oy = H - 30, k = Math.min((W - ox - 20) / 6.4, (oy - 20) / 6.4);
+  const sx = v => ox + v * k, sy = v => oy - v * k;
+  // стена и пол
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, oy, W, H - oy); g.fillRect(ox - 16, 0, 16, oy);
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let m = 1; m <= 6; m++) { g.fillText(m + ' м', sx(m), oy + 16); }
+  if (showTrace) { g.strokeStyle = '#f59e0b'; g.lineWidth = 2; g.setLineDash([5, 4]); g.beginPath(); g.arc(sx(0), sy(0), Lh / 2 * k, -Math.PI / 2, 0); g.stroke(); g.setLineDash([]); }
+  // лестница
+  g.strokeStyle = '#8b5a2b'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(sx(x), sy(0)); g.lineTo(sx(0), sy(y)); g.stroke(); g.lineCap = 'butt';
+  const vx = u(), vy = -x * vx / y, om = vx / y, vm = om * Lh / 2;
+  if (showIcr) {
+    g.strokeStyle = '#9333ea'; g.lineWidth = 1; g.setLineDash([4, 4]);
+    g.beginPath(); g.moveTo(sx(x), sy(0)); g.lineTo(sx(x), sy(y)); g.lineTo(sx(0), sy(y)); g.stroke();
+    g.beginPath(); g.moveTo(sx(x / 2), sy(y / 2)); g.lineTo(sx(x), sy(y)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#9333ea'; g.beginPath(); g.arc(sx(x), sy(y), 6, 0, 7); g.fill();
+    g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText('МЦС', sx(x) + 9, sy(y) - 6);
+  }
+  const vs = 70;                                   // пикселей на 1 м/с
+  arrow(g, sx(x), sy(0), sx(x) + vx * vs, sy(0), '#2563eb', 'u');
+  arrow(g, sx(0), sy(y), sx(0), sy(y) - vy * vs, '#2563eb', 'v');
+  // скорость середины: перпендикулярна отрезку МЦС → середина
+  const mx = x / 2, my = y / 2, dx = mx - x, dy = my - y, dl = Math.hypot(dx, dy);
+  const vmx = -dy / dl * vm, vmy = dx / dl * vm;   // поворот на 90° по часовой стрелке
+  arrow(g, sx(mx), sy(my), sx(mx) + vmx * vs, sy(my) - vmy * vs, '#16a34a', '');
+  g.fillStyle = '#1d1d1f'; for (const [px, py] of [[x, 0], [0, y], [mx, my]]) { g.beginPath(); g.arc(sx(px), sy(py), 4, 0, 7); g.fill(); }
+
+  $('Lo').textContent = fmt(Lh, 1) + ' м'; $('uo').textContent = fmt(vx, 1) + ' м/с'; $('xo').textContent = fmt(x) + ' м';
+  $('read').innerHTML = ro('высота верха y', fmt(y) + ' м') + ro('скорость верха', fmt(Math.abs(vy)) + ' м/с') + ro('угловая скорость ω', fmt(om, 3) + ' рад/с') +
+    ro('скорость середины', fmt(vm, 3) + ' м/с') + ro('ускорение верха', fmt(vx * vx * Lh * Lh / y ** 3, 3) + ' м/с²');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const nx = +$('x').value + u() * (ts - last) / 1000; $('x').value = Math.min(nx, L() * 0.97); }
+  last = ts; draw();
+  if (+$('x').value >= L() * 0.97 - 1e-6) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (+$('x').value >= L() * 0.97 - 1e-6) $('x').value = 0.5; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('icr').onclick = () => { showIcr = !showIcr; $('icr').classList.toggle('on', showIcr); draw(); };
+$('trace').onclick = () => { showTrace = !showTrace; $('trace').classList.toggle('on', showTrace); draw(); };
+['L', 'u', 'x'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

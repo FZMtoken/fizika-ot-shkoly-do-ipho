@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Производная</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .tog { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  label span { font-weight:400; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .readout { font-variant-numeric:tabular-nums; margin-top:8px; }
+  .sec { color:#dc2626; font-weight:600; } .tan { color:#16a34a; font-weight:600; }
+  .task { border-left:4px solid #2563eb; }
+
+  /* Стабильная вёрстка: размеры блоков не зависят от значений, ничего не прыгает при движении ползунков и нажатии кнопок */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; color:var(--ink); }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  td, th { white-space:nowrap; }
+  #play { min-width: 7.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Производная: от секущей к касательной</h1>
+  <p class="lead">Уменьшай Δt и смотри, как секущая через две точки графика поворачивается и превращается в касательную.</p>
+
+  <div class="card">
+    <div class="row" id="fn">
+      <button class="tog on" data-f="0">x = t²</button>
+      <button class="tog" data-f="1">x = sin t</button>
+      <button class="tog" data-f="2">x = t³ − 3t</button>
+      <button class="tog" data-f="3">x = eᵗ</button>
+    </div>
+    <div class="controls">
+      <label>Точка t₀: <span id="t0o"></span><input id="t0" type="range" min="-2.5" max="2.5" step="0.05" value="1"></label>
+      <label>Промежуток Δt: <span id="dto"></span><input id="dt" type="range" min="0" max="100" step="1" value="100"></label>
+    </div>
+    <div class="row" style="margin:10px 0 0">
+      <button class="tog" id="tanBtn">Показать касательную</button>
+      <button class="tog" id="derBtn">Показать график производной</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Для x = t² в точке t₀ = 1 уменьшай Δt. К какому числу стремится наклон секущей? Сравни с формулой (t²)′ = 2t.</li>
+      <li>Для x = sin t найди точки, где касательная горизонтальна. Чему там равен cos t?</li>
+      <li>Включи график производной. Где функция растёт, а где производная положительна? Совпадает?</li>
+      <li>Для x = eᵗ сравни высоту графика функции и его наклон в любой точке. Что замечаешь?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const F = [
+  { f: t => t * t,          d: t => 2 * t,         name: 't²',     dn: '2t',       y: [-1, 7] },
+  { f: t => Math.sin(t),    d: t => Math.cos(t),   name: 'sin t',  dn: 'cos t',    y: [-1.6, 1.6] },
+  { f: t => t ** 3 - 3 * t, d: t => 3 * t * t - 3, name: 't³ − 3t', dn: '3t² − 3', y: [-5, 5] },
+  { f: t => Math.exp(t),    d: t => Math.exp(t),   name: 'eᵗ',     dn: 'eᵗ',       y: [-1, 8] },
+];
+let fi = 0, showTan = false, showDer = false;
+const fmt = (n, p = 3) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const dtVal = () => 2 * Math.pow(10, -3 * (1 - $('dt').value / 100));   // от 2 до 0,002, логарифмически
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const { f, d, y: [y0, y1] } = F[fi];
+  const T0 = -3, T1 = 3, L = 40, R = 10, Tp = 10, B = 26;
+  const sx = t => L + (t - T0) / (T1 - T0) * (W - L - R);
+  const sy = y => Tp + (y1 - y) / (y1 - y0) * (H - Tp - B);
+
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center';
+  for (let t = T0; t <= T1; t++) { g.beginPath(); g.moveTo(sx(t), Tp); g.lineTo(sx(t), H - B); g.stroke(); g.fillText(fmt(t), sx(t), H - 8); }
+  g.textAlign = 'right';
+  const st = (y1 - y0) > 8 ? 2 : (y1 - y0) > 4 ? 1 : 0.5;
+  for (let y = Math.ceil(y0 / st) * st; y <= y1; y += st) { g.beginPath(); g.moveTo(L, sy(y)); g.lineTo(W - R, sy(y)); g.stroke(); g.fillText(fmt(y), L - 5, sy(y) + 4); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, sy(0)); g.lineTo(W - R, sy(0)); g.moveTo(sx(0), Tp); g.lineTo(sx(0), H - B); g.stroke();
+  g.textAlign = 'left'; g.font = 'italic 14px serif'; g.fillText('t', W - R - 8, sy(0) - 6);
+
+  g.save(); g.beginPath(); g.rect(L, Tp, W - L - R, H - Tp - B); g.clip();
+  const plot = (fn, col, w, dash) => { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath();
+    for (let i = 0; i <= 600; i++) { const t = T0 + (T1 - T0) * i / 600; i ? g.lineTo(sx(t), sy(fn(t))) : g.moveTo(sx(t), sy(fn(t))); }
+    g.stroke(); g.setLineDash([]); };
+  if (showDer) plot(d, '#9333ea', 2, [6, 5]);
+  plot(f, '#1d1d1f', 2.5);
+
+  const t0 = +$('t0').value, dt = dtVal(), t1 = t0 + dt;
+  const k = (f(t1) - f(t0)) / dt, kt = d(t0);
+  const line = (kk, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath();
+    g.moveTo(sx(T0), sy(f(t0) + kk * (T0 - t0))); g.lineTo(sx(T1), sy(f(t0) + kk * (T1 - t0))); g.stroke(); };
+  if (showTan) line(kt, '#16a34a', 2);
+  line(k, '#dc2626', 2);
+  // треугольник Δt, Δx
+  g.strokeStyle = '#dc2626'; g.lineWidth = 1; g.setLineDash([3, 3]);
+  g.beginPath(); g.moveTo(sx(t0), sy(f(t0))); g.lineTo(sx(t1), sy(f(t0))); g.lineTo(sx(t1), sy(f(t1))); g.stroke(); g.setLineDash([]);
+  for (const [t, col] of [[t0, '#1d1d1f'], [t1, '#dc2626']]) { g.fillStyle = col; g.beginPath(); g.arc(sx(t), sy(f(t)), 5, 0, 7); g.fill(); }
+  g.restore();
+
+  g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillStyle = '#1d1d1f';
+  g.fillText('x = ' + F[fi].name, L + 8, Tp + 16);
+  if (showDer) { g.fillStyle = '#9333ea'; g.fillText("x′ = " + F[fi].dn, L + 8, Tp + 34); }
+
+  $('t0o').textContent = fmt(t0, 2); $('dto').textContent = fmt(dt, 3);
+  $('read').innerHTML = ro('наклон секущей Δx/Δt', fmt(k), 'sec') +
+    ro('наклон касательной x′(t₀)', showTan ? fmt(kt) : 'скрыт', 'tan') + ro('разница', fmt(Math.abs(k - kt)));
+}
+
+document.querySelectorAll('#fn .tog').forEach(b => b.onclick = () => {
+  fi = +b.dataset.f; document.querySelectorAll('#fn .tog').forEach(x => x.classList.toggle('on', x === b)); draw();
+});
+$('tanBtn').onclick = () => { showTan = !showTan; $('tanBtn').classList.toggle('on', showTan); draw(); };
+$('derBtn').onclick = () => { showDer = !showDer; $('derBtn').classList.toggle('on', showDer); draw(); };
+['t0', 'dt'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

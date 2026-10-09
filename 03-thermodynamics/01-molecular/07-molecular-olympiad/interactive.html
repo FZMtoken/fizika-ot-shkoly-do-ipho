@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Линейный процесс</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Линейный процесс: где газ горячее всего</h1>
+  <p class="lead">1 моль газа переходит из состояния 1 в состояние 2 по отрезку прямой на графике p(V). Красная точка — текущее состояние, через неё проходит изотерма (синяя). Зелёная изотерма — самая горячая из тех, которых касается отрезок. Справа — температура вдоль процесса.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Давление в состоянии 1 (V₁ = 10 л)</i><span id="p1o"></span><input id="p1" type="range" min="100" max="600" step="10" value="300"></label>
+      <label><i>Объём в состоянии 2 (p₂ = 100 кПа)</i><span id="V2o"></span><input id="V2" type="range" min="15" max="60" step="1" value="30"></label>
+      <label><i>Положение точки на отрезке</i><span id="so"></span><input id="s" type="range" min="0" max="100" step="1" value="0"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>При исходных значениях (300 кПа, 30 л) проведи точку по отрезку. Где температура наибольшая? Сравни с примером 3.</li>
+      <li>Уменьши давление в состоянии 1 до 150 кПа. Где теперь максимум — внутри отрезка или на конце?</li>
+      <li>Убедись: в точке максимума отрезок касается изотермы.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31, V1 = 10, P2 = 100, VMAX = 70, PMAX = 700;     // л и кПа; pV в кПа·л = Дж
+let t = 0, running = false, last = null;
+
+function proc() {
+  const p1 = +$('p1').value, V2 = +$('V2').value, b = (p1 - P2) / (V2 - V1), a = p1 + b * V1;   // p = a − bV
+  const s = running ? 50 - 50 * Math.cos(t * 0.7) : +$('s').value;
+  const V = V1 + (V2 - V1) * s / 100, p = a - b * V;
+  let Vm = b > 0 ? a / (2 * b) : V2; Vm = Math.min(V2, Math.max(V1, Vm));
+  return { p1, V2, a, b, s, V, p, Vm, pm: a - b * Vm };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const q = proc(), gap = 40, wl = (W - 50 - gap) * 0.6, wr = W - 50 - gap - wl, x0 = 40, y0 = 14, h = H - 50;
+  // левый график p(V)
+  const X = v => x0 + wl * v / VMAX, Y = p => y0 + h - h * p / PMAX;
+  const axes = (xa, wa, xl, yl) => { g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(xa, y0); g.lineTo(xa, y0 + h); g.lineTo(xa + wa, y0 + h); g.stroke();
+    g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText(yl, xa + 4, y0 + 10); g.textAlign = 'right'; g.fillText(xl, xa + wa, y0 + h + 14); };
+  axes(x0, wl, 'V, л', 'p, кПа');
+  g.fillStyle = '#334155'; g.textAlign = 'center';
+  for (let v = 10; v <= 60; v += 10) g.fillText(v, X(v), y0 + h + 14);
+  g.textAlign = 'right'; for (let p = 100; p <= 600; p += 100) g.fillText(p, x0 - 4, Y(p) + 4);
+  g.save(); g.beginPath(); g.rect(x0, y0, wl, h); g.clip();
+  const iso = (pv, col, lw) => { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (let v = 2; v <= VMAX; v += 0.5) v > 2 ? g.lineTo(X(v), Y(pv / v)) : g.moveTo(X(v), Y(pv / v)); g.stroke(); };
+  iso(q.Vm * q.pm, '#16a34a', 1.5); iso(q.V * q.p, '#2563eb', 1.5);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(V1), Y(q.p1)); g.lineTo(X(q.V2), Y(P2)); g.stroke();
+  g.restore();
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('1', X(V1) + 6, Y(q.p1) - 4); g.fillText('2', X(q.V2) + 6, Y(P2) - 4);
+  g.fillStyle = '#16a34a'; g.beginPath(); g.arc(X(q.Vm), Y(q.pm), 4, 0, 7); g.fill();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(q.V), Y(q.p), 6, 0, 7); g.fill();
+  // правый график T(V)
+  const xr = x0 + wl + gap, Tmax = Math.max(600, Math.ceil(q.Vm * q.pm / R / 300 + 0.2) * 300), XR = v => xr + wr * v / VMAX, YR = T => y0 + h - h * T / Tmax;
+  axes(xr, wr, 'V, л', 'T, К');
+  g.fillStyle = '#334155'; g.textAlign = 'center'; for (let v = 20; v <= 60; v += 20) g.fillText(v, XR(v), y0 + h + 14);
+  g.textAlign = 'right'; for (let T = 300; T <= Tmax; T += 300) g.fillText(T, xr - 4, YR(T) + 4);
+  g.strokeStyle = '#7c3aed'; g.lineWidth = 2.5; g.beginPath();
+  for (let j = 0; j <= 100; j++) { const v = V1 + (q.V2 - V1) * j / 100, T = v * (q.a - q.b * v) / R; j ? g.lineTo(XR(v), YR(T)) : g.moveTo(XR(v), YR(T)); } g.stroke();
+  g.fillStyle = '#16a34a'; g.beginPath(); g.arc(XR(q.Vm), YR(q.Vm * q.pm / R), 4, 0, 7); g.fill();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(XR(q.V), YR(q.V * q.p / R), 6, 0, 7); g.fill();
+  $('p1o').textContent = q.p1 + ' кПа'; $('V2o').textContent = q.V2 + ' л'; $('so').textContent = fmt(q.s, 0) + ' %';
+  $('read').innerHTML = ro('объём V', fmt(q.V, 1) + ' л') + ro('давление p', fmt(q.p, 0) + ' кПа') + ro('температура T', fmt(q.V * q.p / R, 0) + ' К') +
+    ro('наибольшая T', fmt(q.Vm * q.pm / R, 0) + ' К') + ro('она при V', fmt(q.Vm, 1) + ' л');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('s').value = Math.round(proc().s); running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск';
+  if (running) { t = Math.acos(1 - +$('s').value / 50) / 0.7; requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('p1').value = 300; $('V2').value = 30; $('s').value = 0; t = 0; draw(); };
+['p1', 'V2', 's'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

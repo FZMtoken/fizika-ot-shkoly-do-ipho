@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Труба переменного сечения</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Труба переменного сечения</h1>
+  <p class="lead">По горизонтальной трубе сечением 20 см² течёт вода, в середине труба сужается. Вертикальные трубки — манометры: высота воды в них показывает избыточное давление. Точки движутся со скоростью воды (в масштабе).</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Сечение узкой части / широкой</i><span id="ko"></span><input id="k" type="range" min="0.2" max="1" step="0.05" value="0.5"></label>
+      <label><i>Расход воды Q</i><span id="qo"></span><input id="q" type="range" min="0.5" max="4" step="0.1" value="2"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Сужай трубу и следи за скоростью и уровнями в манометрах. Где давление меньше?</li>
+      <li>Увеличь расход вдвое. Во сколько раз выросла разность уровней в манометрах?</li>
+      <li>Подбери сужение, при котором вода в среднем манометре опустится до самой трубы. Что будет, если сузить ещё?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, RHO = 1000, S1 = 20e-4, P1 = 6000;            // избыточное давление в широкой части, Па
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, last = null;
+
+function calc() {
+  const k = +$('k').value, Q = +$('q').value / 1000, v1 = Q / S1, v2 = v1 / k;
+  const p2 = P1 - RHO / 2 * (v2 * v2 - v1 * v1);
+  return { k, Q, v1, v2, p2, h1: P1 / (RHO * G), h2: p2 / (RHO * G) };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = calc(), axis = H - 70, R1 = 34, R2 = R1 * Math.sqrt(S.k), x0 = 20, x1 = W - 20, L = x1 - x0, kh = 300;   // kh — пикселей на метр высоты
+  const rad = x => { const u = (x - x0) / L; if (u < 0.3 || u > 0.7) return R1; if (u > 0.4 && u < 0.6) return R2;
+    const s = u < 0.5 ? (u - 0.3) / 0.1 : (0.7 - u) / 0.1; return R1 + (R2 - R1) * (0.5 - 0.5 * Math.cos(Math.PI * s)); };
+  // вода в трубе
+  g.fillStyle = '#bfdbfe'; g.beginPath(); for (let x = x0; x <= x1; x += 2) g.lineTo(x, axis - rad(x)); for (let x = x1; x >= x0; x -= 2) g.lineTo(x, axis + rad(x)); g.fill();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2;
+  g.beginPath(); for (let x = x0; x <= x1; x += 2) g.lineTo(x, axis - rad(x)); g.stroke();
+  g.beginPath(); for (let x = x0; x <= x1; x += 2) g.lineTo(x, axis + rad(x)); g.stroke();
+  // частицы
+  g.fillStyle = '#1d4ed8';
+  for (let row = -2; row <= 2; row++) for (let i = 0; i < 14; i++) {
+    // u — равномерно бегущая доля прошедшего объёма; warp переводит её в координату: в узком месте частицы бегут быстрее
+    const u = ((i / 14) + t * 0.12 * S.v1) % 1, xs = x0 + warp(u, S.k) * L;
+    g.beginPath(); g.arc(xs, axis + row * rad(xs) * 0.38, 2.5, 0, 7); g.fill();
+  }
+  // манометры
+  [[0.15, S.h1], [0.5, S.h2], [0.85, S.h1]].forEach(([u, h]) => {
+    const x = x0 + u * L, yTop = axis - rad(x), hh = Math.max(0, h) * kh;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.strokeRect(x - 7, 14, 14, yTop - 14);
+    g.fillStyle = '#93c5fd'; g.fillRect(x - 6, yTop - hh, 12, hh);
+    g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.textAlign = 'left';
+    g.fillText(h < 0 ? 'засасывает воздух' : fmt(h * 100, 1) + ' см', x + 12, Math.max(28, yTop - hh + 4));
+  });
+  $('ko').textContent = fmt(S.k) + ' (узкое ' + fmt(S.k * 20, 0) + ' см²)'; $('qo').textContent = fmt(S.Q * 1000, 1) + ' л/с';
+  $('read').innerHTML = ro('скорость в широкой части', fmt(S.v1) + ' м/с') + ro('скорость в узкой части', fmt(S.v2) + ' м/с') +
+    ro('давление в широкой (изб.)', fmt(P1 / 1000, 1) + ' кПа') + ro('давление в узкой (изб.)', fmt(S.p2 / 1000, 2) + ' кПа') + ro('разность давлений', fmt((P1 - S.p2) / 1000, 2) + ' кПа');
+}
+// u — доля «прошедшего объёма» → доля длины трубы (в узкой части частицы растягиваются по длине)
+function warp(u, k) {
+  // длины участков: 0,3 широк., 0,1 переход, 0,2 узк., 0,1 переход, 0,3 широк.; объёмы пропорциональны длине × сечение
+  const seg = [[0.3, 1], [0.1, (1 + k) / 2], [0.2, k], [0.1, (1 + k) / 2], [0.3, 1]], tot = seg.reduce((a, [l, s]) => a + l * s, 0);
+  let vol = u * tot, x = 0;
+  for (const [l, s] of seg) { if (vol <= l * s) return x + vol / s; vol -= l * s; x += l; }
+  return 1;
+}
+
+function tick(ts) { const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+['k', 'q'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Второй закон Кеплера</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Второй закон Кеплера</h1>
+  <p class="lead">Планета движется по эллипсу, Солнце — в фокусе. Цветные секторы радиус планеты описывает за равные промежутки времени — по 1/12 периода. Их площади равны.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Эксцентриситет e:<span id="eo"></span><input id="e" type="range" min="0" max="0.9" step="0.05" value="0.6"></label>
+      <label>Большая полуось a:<span id="ao"></span><input id="a" type="range" min="1" max="9" step="0.5" value="4"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь e = 0. Какие получились секторы? Как меняется скорость планеты?</li>
+      <li>Увеличь e до 0,8. Где планета движется быстрее? Сравни форму секторов у перигелия и у афелия.</li>
+      <li>Проверь: отношение скоростей в перигелии и афелии равно (1 + e)/(1 − e).</li>
+      <li>Меняй большую полуось. Как меняется период? Сравни с T² = a³.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const SHOW = 8;                      // секунд анимации на один период
+let t = 0, running = false, last = null;
+const COLS = ['#bfdbfe', '#fde68a'];
+function ecc(M, e) { let E = e > 0.8 ? Math.PI : M; for (let i = 0; i < 30; i++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E)); return E; }
+function pos(a, e, frac) {           // frac — доля периода от перигелия
+  const E = ecc(2 * Math.PI * frac, e), b = a * Math.sqrt(1 - e * e);
+  return [a * (Math.cos(E) - e), b * Math.sin(E), E];
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const e = +$('e').value, a = +$('a').value, b = a * Math.sqrt(1 - e * e), T = Math.pow(a, 1.5);
+  const k = Math.min((W - 40) / (2 * a), (H - 40) / (2 * b)) * 0.95;   // масштаб под размер орбиты
+  const ox = W / 2 + a * e * k, oy = H / 2;            // Солнце в фокусе; центр эллипса по центру холста
+  const sx = x => ox + x * k, sy = y => oy - y * k;
+  // секторы за равные времена
+  const N = 12;
+  for (let i = 0; i < N; i++) {
+    g.fillStyle = COLS[i % 2]; g.beginPath(); g.moveTo(sx(0), sy(0));
+    for (let j = 0; j <= 30; j++) { const q = pos(a, e, (i + j / 30) / N); g.lineTo(sx(q[0]), sy(q[1])); }
+    g.closePath(); g.fill();
+  }
+  g.strokeStyle = '#475569'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(sx(-a * e), sy(0), a * k, b * k, 0, 0, 7); g.stroke();
+  g.strokeStyle = '#cbd5e1'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(sx(-a - a * e), sy(0)); g.lineTo(sx(a - a * e), sy(0)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(sx(0), sy(0), 8, 0, 7); g.fill();
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  g.fillText('перигелий', sx(a * (1 - e)), sy(0) + 16); g.fillText('афелий', sx(-a * (1 + e)), sy(0) + 16);
+  // планета
+  const frac = (t / SHOW) % 1, [px, py, E] = pos(a, e, frac), rr = Math.hypot(px, py);
+  const vRel = Math.sqrt(2 / rr - 1 / a);          // скорость в единицах 2π а.е./год (скорость Земли = 1)
+  const vx = -a * Math.sin(E), vy = b * Math.cos(E), vl = Math.hypot(vx, vy), L = 28 * vRel * Math.sqrt(a);
+  g.strokeStyle = g.fillStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(px), sy(py)); g.lineTo(sx(px) + vx / vl * L, sy(py) - vy / vl * L); g.stroke();
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(sx(0), sy(0)); g.lineTo(sx(px), sy(py)); g.stroke();
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(sx(px), sy(py), 6, 0, 7); g.fill();
+  $('eo').textContent = fmt(e, 2); $('ao').textContent = fmt(a, 1) + ' а. е.';
+  const rp = a * (1 - e), ra = a * (1 + e);
+  $('read').innerHTML = ro('период T = a^1,5', fmt(T, 2) + ' года') + ro('перигелий / афелий', fmt(rp, 2) + ' / ' + fmt(ra, 2) + ' а. е.') +
+    ro('vп / vа', fmt(ra / rp, 2)) + ro('расстояние сейчас', fmt(rr, 2) + ' а. е.') + ro('скорость сейчас', fmt(29.8 * vRel, 1) + ' км/с') +
+    ro('прошло', fmt(frac * T, 2) + ' года');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000);
+  last = ts; draw(); requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['e', 'a'].forEach(id => $(id).oninput = () => { draw(); });
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Приближения</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .a1 { color:#2563eb; } .a2 { color:#16a34a; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off] { visibility:hidden; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Приближения</h1>
+  <p class="lead">Чёрная линия — точная функция, <b class="a1">синяя</b> — приближение первого порядка, <b class="a2">зелёная</b> — второго.
+    Вблизи нуля они почти совпадают.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="fn">
+        <button data-f="pow" class="on">(1 + x)ⁿ</button><button data-f="sin">sin x</button><button data-f="cos">cos x</button>
+        <button data-f="exp">eˣ</button><button data-f="ln">ln(1 + x)</button>
+      </div>
+    </div>
+    <div class="controls">
+      <label>Значение x:<span id="xo"></span><input id="x" type="range" min="-0.9" max="1" step="0.01" value="0.2"></label>
+      <label class="slot" id="nSlot">Показатель n:<span id="no"></span><input id="n" type="range" min="-3" max="3" step="0.5" value="0.5"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Выбери (1 + x)ⁿ с n = 0,5. До какого x ошибка первого порядка меньше 1%?</li>
+      <li>Для cos x сравни приближения первого и второго порядка. Почему первое бесполезно?</li>
+      <li>Для sin x найди угол в градусах, при котором ошибка приближения sin x ≈ x достигает 1%.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (v, p = 4) => !isFinite(v) ? '—' : (Math.round(v * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let fam = 'pow';
+function F() {
+  const n = +$('n').value;
+  switch (fam) {
+    case 'pow': return { f: x => Math.pow(1 + x, n), a1: x => 1 + n * x, a2: x => 1 + n * x + n * (n - 1) / 2 * x * x,
+      n1: `1 + ${fmt(n, 1)}x`, name: `(1 + x)^${fmt(n, 1)}`, lo: -0.9, hi: 1 };
+    case 'sin': return { f: Math.sin, a1: x => x, a2: x => x - x ** 3 / 6, n1: 'x', name: 'sin x', lo: -1.6, hi: 1.6 };
+    case 'cos': return { f: Math.cos, a1: () => 1, a2: x => 1 - x * x / 2, n1: '1', name: 'cos x', lo: -1.6, hi: 1.6 };
+    case 'exp': return { f: Math.exp, a1: x => 1 + x, a2: x => 1 + x + x * x / 2, n1: '1 + x', name: 'eˣ', lo: -1.5, hi: 1.5 };
+    default:    return { f: x => Math.log(1 + x), a1: x => x, a2: x => x - x * x / 2, n1: 'x', name: 'ln(1 + x)', lo: -0.9, hi: 1.5 };
+  }
+}
+const relErr = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-12) * 100;
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const A = F(), x = Math.max(A.lo, Math.min(A.hi, +$('x').value));
+  let y0 = Infinity, y1 = -Infinity;
+  for (let i = 0; i <= 200; i++) { const t = A.lo + (A.hi - A.lo) * i / 200, v = A.f(t); if (isFinite(v)) { y0 = Math.min(y0, v); y1 = Math.max(y1, v); } }
+  const pad = (y1 - y0) * .15 || 1; y0 -= pad; y1 += pad;
+  const L = 42, R = 10, Tp = 10, B = 24, sx = t => L + (t - A.lo) / (A.hi - A.lo) * (W - L - R), sy = v => Tp + (y1 - v) / (y1 - y0) * (H - Tp - B);
+  g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  const xs = A.hi - A.lo > 2 ? 0.5 : 0.25;
+  for (let t = Math.ceil(A.lo / xs) * xs; t <= A.hi + 1e-9; t += xs) { g.beginPath(); g.moveTo(sx(t), Tp); g.lineTo(sx(t), H - B); g.stroke(); g.fillText(fmt(t, 2), sx(t), H - 8); }
+  const ys = (y1 - y0) > 4 ? 1 : (y1 - y0) > 2 ? 0.5 : 0.25;
+  g.textAlign = 'right';
+  for (let v = Math.ceil(y0 / ys) * ys; v <= y1; v += ys) { g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - R, sy(v)); g.stroke(); g.fillText(fmt(v, 2), L - 4, sy(v) + 4); }
+  g.save(); g.beginPath(); g.rect(L, Tp, W - L - R, H - Tp - B); g.clip();
+  const plot = (f, col, w, dash) => { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); let pen = false;
+    for (let i = 0; i <= 300; i++) { const t = A.lo + (A.hi - A.lo) * i / 300, v = f(t); if (!isFinite(v)) { pen = false; continue; } pen ? g.lineTo(sx(t), sy(v)) : g.moveTo(sx(t), sy(v)); pen = true; }
+    g.stroke(); g.setLineDash([]); };
+  plot(A.a2, '#16a34a', 2, [6, 4]); plot(A.a1, '#2563eb', 2, [3, 3]); plot(A.f, '#1d1d1f', 2.5);
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(sx(x), Tp); g.lineTo(sx(x), H - B); g.stroke();
+  for (const [f, col] of [[A.f, '#1d1d1f'], [A.a1, '#2563eb'], [A.a2, '#16a34a']]) { g.fillStyle = col; g.beginPath(); g.arc(sx(x), sy(f(x)), 4.5, 0, 7); g.fill(); }
+  g.restore();
+  // граница 1% ошибки первого порядка (по положительной стороне)
+  let lim = NaN; for (let t = 0.001; t <= A.hi; t += 0.001) { if (relErr(A.a1(t), A.f(t)) > 1) { lim = t; break; } }
+  $('xo').textContent = fmt(x, 2) + (fam === 'sin' || fam === 'cos' ? ` рад = ${fmt(x * 180 / Math.PI, 1)}°` : '');
+  $('no').textContent = fmt(+$('n').value, 1);
+  $('read').innerHTML = ro('точно ' + A.name, fmt(A.f(x))) + ro('1-й порядок: ' + A.n1, fmt(A.a1(x)), 'a1') + ro('2-й порядок', fmt(A.a2(x)), 'a2') +
+    ro('ошибка 1-го порядка', fmt(relErr(A.a1(x), A.f(x)), 3) + ' %') + ro('ошибка 2-го порядка', fmt(relErr(A.a2(x), A.f(x)), 3) + ' %') +
+    ro('ошибка 1% при x ≈', isNaN(lim) ? 'не достигается' : fmt(lim, 3) + (fam === 'sin' || fam === 'cos' ? ` (${fmt(lim * 180 / Math.PI, 1)}°)` : ''));
+}
+$('fn').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('fn').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); fam = b.dataset.f;
+  $('nSlot').toggleAttribute('data-off', fam !== 'pow'); const A = F();
+  Object.assign($('x'), { min: A.lo, max: A.hi }); $('x').value = 0.2; draw();
+});
+['x', 'n'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

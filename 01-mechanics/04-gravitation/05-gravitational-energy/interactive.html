@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Потенциальная яма планеты</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .ok { color:#16a34a; } .no { color:#dc2626; } .u { color:#2563eb; } .e { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Потенциальная яма планеты</h1>
+  <p class="lead"><b class="u">Синяя кривая</b> — потенциальная энергия тела массой 1 кг: U = −GM/r. <b class="e">Красная линия</b> — полная энергия тела, запущенного вертикально.
+    Тело поднимается, пока кривая ниже линии. Если линия выше нуля, тело улетает навсегда.</p>
+
+  <div class="card">
+    <div class="seg" id="pl"><button data-p="0" class="on">Земля</button><button data-p="1">Луна</button><button data-p="2">Марс</button></div>
+    <div class="controls">
+      <label>Скорость запуска:<span id="vo"></span><input id="v" type="range" min="0" max="1.2" step="0.01" value="0.45"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>На Земле запусти тело со скоростью около 5 км/с. На какую высоту оно поднимется? Сравни с v²/(2g).</li>
+      <li>Найди скорость, при которой красная линия доходит до нуля. Это вторая космическая скорость.</li>
+      <li>Сравни вторую космическую для Земли, Луны и Марса.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const PL = [{ n: 'Земля', GM: 4.0e14, R: 6.37e6 }, { n: 'Луна', GM: 4.9e12, R: 1.737e6 }, { n: 'Марс', GM: 4.28e13, R: 3.39e6 }];
+let pi = 0;
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = PL[pi], v2 = Math.sqrt(2 * p.GM / p.R), v = +$('v').value * v2, U0 = p.GM / p.R;   // U0 — глубина ямы у поверхности
+  const eps = v * v / 2 / U0 - 1;                      // полная энергия в единицах GM/R
+  const XM = 8, L = 56, Rt = 14, Tp = 16, B = 30, YT = 0.4, YB = -1.05;
+  const sx = x => L + (x - 1) / (XM - 1) * (W - L - Rt), sy = y => Tp + (YT - y) / (YT - YB) * (H - Tp - B);
+  g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let y = -1; y <= 0.4001; y += 0.2) { g.strokeStyle = Math.abs(y) < 1e-9 ? '#999' : '#ecece6'; g.beginPath(); g.moveTo(L, sy(y)); g.lineTo(W - Rt, sy(y)); g.stroke();
+    g.fillStyle = '#6b6b70'; g.fillText(fmt(y, 1), L - 4, sy(y) + 4); }
+  g.textAlign = 'center'; for (let x = 1; x <= XM; x++) g.fillText(x + 'R', sx(x), H - 10);
+  g.save(); g.translate(12, (Tp + H - B) / 2); g.rotate(-Math.PI / 2); g.fillText('энергия, в единицах GM/R', 0, 0); g.restore();
+  // заливка под кривой (планета слева)
+  g.strokeStyle = '#2563eb'; g.lineWidth = 3; g.beginPath();
+  for (let x = 1; x <= XM + 1e-9; x += 0.02) { const y = -1 / x; x === 1 ? g.moveTo(sx(x), sy(y)) : g.lineTo(sx(x), sy(y)); } g.stroke();
+  // линия энергии
+  const rmax = eps < 0 ? -1 / eps : Infinity;
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(1), sy(Math.min(eps, YT))); g.lineTo(sx(Math.min(rmax, XM)), sy(Math.min(eps, YT))); g.stroke();
+  if (eps < 0 && rmax <= XM) { g.fillStyle = '#dc2626'; g.beginPath(); g.arc(sx(rmax), sy(eps), 5, 0, 7); g.fill();
+    g.setLineDash([4, 4]); g.beginPath(); g.moveTo(sx(rmax), sy(eps)); g.lineTo(sx(rmax), sy(YB)); g.stroke(); g.setLineDash([]); }
+  // кинетическая энергия у поверхности — стрелка
+  g.strokeStyle = '#16a34a'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(1) + 8, sy(-1)); g.lineTo(sx(1) + 8, sy(Math.min(eps, YT))); g.stroke();
+  g.fillStyle = '#16a34a'; g.textAlign = 'right'; g.fillText('зелёный отрезок — кинетическая энергия у поверхности', W - Rt, Tp + 10);
+  const g0 = p.GM / p.R / p.R, h = eps < 0 ? (rmax - 1) * p.R : Infinity, hUni = v * v / 2 / g0;
+  $('vo').textContent = fmt(v / 1000, 2) + ' км/с (' + fmt(v / v2 * 100, 0) + ' % от второй космической)';
+  $('read').innerHTML = ro('первая космическая', fmt(v2 / Math.SQRT2 / 1000) + ' км/с') + ro('вторая космическая', fmt(v2 / 1000) + ' км/с') +
+    ro('полная энергия', fmt(eps * U0 / 1e6, 1) + ' МДж/кг', eps < 0 ? 'ok' : 'no') +
+    ro('высота подъёма', isFinite(h) ? fmt(h / 1000, 0) + ' км' : 'улетает', isFinite(h) ? '' : 'no') + ro('оценка v²/(2g)', fmt(hUni / 1000, 0) + ' км');
+}
+$('pl').querySelectorAll('button').forEach(b => b.onclick = () => { $('pl').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); pi = +b.dataset.p; draw(); });
+$('v').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Куда уходит энергия при трении</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .em { color:#2563eb; } .q { color:#dc2626; } .ok { color:#16a34a; } .no { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Куда уходит энергия при трении</h1>
+  <p class="lead">Брусок массой 1 кг соскальзывает со склона и едет по горизонтальному полу. Коэффициент трения везде одинаков.
+    Столбики: <b class="em">механическая энергия</b>, <b class="q">выделившееся тепло</b> и их сумма.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Высота склона h:<span id="ho"></span><input id="h" type="range" min="1" max="5" step="0.5" value="3"></label>
+      <label>Угол склона α:<span id="ao"></span><input id="a" type="range" min="20" max="60" step="5" value="40"></label>
+      <label>Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0" max="0.6" step="0.05" value="0.3"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="280"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь μ = 0. Сравни скорость у подножия с √(2gh).</li>
+      <li>Включи трение и следи за столбиками. Что происходит с суммой механической энергии и тепла?</li>
+      <li>Меняй угол при тех же h и μ. Сдвигается ли точка остановки по горизонтали? Сравни с h/μ.</li>
+      <li>Сделай склон пологим, а трение большим. Когда брусок вообще не поедет?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, M = 1;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, running = false, last = null;
+function P() {
+  const h = +$('h').value, al = +$('a').value * Math.PI / 180, mu = +$('mu').value;
+  const l = h / Math.sin(al), d = h / Math.tan(al), a1 = G * (Math.sin(al) - mu * Math.cos(al)), slides = a1 > 1e-9;
+  const t1 = slides ? Math.sqrt(2 * l / a1) : Infinity, v1 = slides ? a1 * t1 : 0;
+  const D = mu > 0 ? h / mu : Infinity, X = mu >= 0.1 ? D : d + 10 * h;          // ширина сцены по горизонтали
+  const t2 = mu > 0 ? v1 / (mu * G) : Infinity;
+  return { h, al, mu, l, d, a1, slides, t1, v1, D, X, t2 };
+}
+// положение вдоль пути и скорость в момент tt
+function state(p, tt) {
+  if (!p.slides) return { s: 0, v: 0, end: true };
+  if (tt <= p.t1) return { s: p.a1 * tt * tt / 2, v: p.a1 * tt, end: false };
+  const tau = Math.min(tt - p.t1, p.t2), fl = p.v1 * tau - p.mu * G * tau * tau / 2;
+  const s = p.l + Math.min(fl, p.X - p.d), v = p.v1 - p.mu * G * tau;
+  return { s, v: Math.max(0, v), end: tau >= p.t2 || fl >= p.X - p.d };
+}
+function energies(p, s) {
+  const onIncl = Math.min(s, p.l), onFlat = Math.max(0, s - p.l);
+  const Ep = M * G * p.h * (1 - onIncl / p.l), Q = p.mu * M * G * (Math.cos(p.al) * onIncl + onFlat);
+  return { Ep, Q, Em: M * G * p.h - Q };
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), st = state(p, t), e = energies(p, st.s);
+  const barW = Math.min(150, W * 0.28), TW = W - barW - 24, L = 14, B = 40, Tp = 30;
+  const k = Math.min((TW - L - 10) / p.X, (H - B - Tp) / p.h), gy = H - B;
+  const sx = x => L + x * k, sy = y => gy - y * k;
+  // пол и склон
+  g.fillStyle = '#e7e2d6'; g.beginPath(); g.moveTo(sx(0), sy(p.h)); g.lineTo(sx(p.d), gy); g.lineTo(sx(p.X), gy); g.lineTo(sx(p.X), gy + 12); g.lineTo(sx(0), gy + 12); g.fill();
+  g.strokeStyle = '#78716c'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx(0), sy(p.h)); g.lineTo(sx(p.d), gy); g.lineTo(sx(p.X), gy); g.stroke();
+  // метка остановки по формуле h/μ
+  g.font = '11px system-ui'; g.textAlign = 'center';
+  if (p.slides && isFinite(p.D) && p.D <= p.X + 1e-9) {
+    g.strokeStyle = '#dc2626'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(sx(p.D), gy - 40); g.lineTo(sx(p.D), gy + 12); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#dc2626'; g.textAlign = 'right'; g.fillText('h/μ = ' + fmt(p.D, 1) + ' м', sx(p.D) - 4, gy - 30); }
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText('старт', sx(0) + 2, sy(p.h) - 22);
+  g.textAlign = 'center'; g.fillText('0', sx(0), gy + 26); g.fillText(fmt(p.X, 1) + ' м', sx(p.X) - 14, gy + 26);
+  // брусок
+  const S = 16; let bx, by, ang;
+  if (st.s <= p.l) { bx = sx(st.s * Math.cos(p.al)); by = sy(p.h - st.s * Math.sin(p.al)); ang = p.al; }
+  else { bx = sx(p.d + st.s - p.l); by = gy; ang = 0; }
+  g.save(); g.translate(bx, by); g.rotate(ang); g.fillStyle = '#2563eb'; g.fillRect(-S / 2, -S, S, S); g.restore();
+  if (!p.slides) { g.fillStyle = '#dc2626'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('tg α ≤ μ: трение покоя удерживает брусок', L, 16); }
+  // столбики энергии
+  const E0 = M * G * p.h, bx0 = TW + 24, bw = (barW - 12) / 3, base = gy, bh = gy - Tp, sc = v => v / (M * G * 5) * bh;
+  [[e.Em, '#2563eb', 'Eмех'], [e.Q, '#dc2626', 'Q'], [e.Em + e.Q, '#1d1d1f', 'сумма']].forEach(([v, col, lab], i) => {
+    g.fillStyle = col; g.fillRect(bx0 + i * (bw + 6), base - sc(v), bw, sc(v));
+    g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, bx0 + i * (bw + 6) + bw / 2, base + 16); });
+  g.strokeStyle = '#999'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx0 - 4, base); g.lineTo(W - 4, base); g.stroke();
+  $('ho').textContent = fmt(p.h, 1) + ' м'; $('ao').textContent = $('a').value + '°'; $('muo').textContent = fmt(p.mu, 2);
+  const stop = !p.slides ? 'не скользит' : isFinite(p.D) ? fmt(p.D, 1) + ' м' : 'нет остановки';
+  $('read').innerHTML = ro('скорость', fmt(st.v) + ' м/с') + ro('механическая энергия', fmt(e.Em) + ' Дж', 'em') + ro('тепло Q', fmt(e.Q) + ' Дж', 'q') +
+    ro('сумма', fmt(e.Em + e.Q) + ' Дж') + ro('у подножия / без трения', p.slides ? fmt(p.v1, 1) + ' / ' + fmt(Math.sqrt(2 * G * p.h), 1) + ' м/с' : '—') +
+    ro('остановка по горизонтали', stop, p.slides ? 'ok' : 'no');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000);
+  last = ts; draw();
+  if (state(P(), t).end) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (state(P(), t).end && t > 0) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['h', 'a', 'mu'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

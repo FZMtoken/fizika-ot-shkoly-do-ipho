@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пружины: закон Гука</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --k1:#2563eb; --k2:#16a34a; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  .c1 { color:var(--k1); } .c2 { color:var(--k2); }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 14px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .graphs { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  .slot[data-off] { visibility:hidden; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Пружины: закон Гука</h1>
+  <p class="lead">Груз висит на пружинах и находится в равновесии: сила упругости равна силе тяжести. Длина пружин на рисунке — в масштабе.</p>
+
+  <div class="card">
+    <div class="seg" id="mode">
+      <button data-m="one" class="on">Одна пружина</button><button data-m="ser">Последовательно</button><button data-m="par">Параллельно</button>
+    </div>
+    <div class="controls">
+      <label class="c1">Жёсткость k₁:<span id="k1o"></span><input id="k1" type="range" min="50" max="400" step="25" value="100"></label>
+      <label class="c2 slot" id="k2s">Жёсткость k₂:<span id="k2o"></span><input id="k2" type="range" min="50" max="400" step="25" value="300"></label>
+      <label>Масса груза m:<span id="mo"></span><input id="m" type="range" min="0" max="2" step="0.1" value="1"></label>
+    </div>
+  </div>
+
+  <div class="graphs">
+    <div class="card"><canvas id="c" height="360"></canvas></div>
+    <div class="card"><canvas id="g" height="360"></canvas></div>
+  </div>
+  <div class="card"><div class="readout" id="read"></div></div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Подвесь груз на одну пружину. Как меняется удлинение с массой груза? Что показывает график?</li>
+      <li>Соедини две пружины последовательно, потом параллельно. В каком случае удлинение больше? Проверь формулы.</li>
+      <li>Подбери жёсткости так, чтобы последовательное соединение имело жёсткость 50 Н/м.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, L0 = 0.12;                  // длина недеформированной пружины, м
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let mode = 'one';
+const K = () => { const k1 = +$('k1').value, k2 = +$('k2').value;
+  return { k1, k2, k: mode === 'one' ? k1 : mode === 'ser' ? k1 * k2 / (k1 + k2) : k1 + k2 }; };
+
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+
+function spring(g, x, y1, y2, col) {       // пружина-зигзаг от y1 до y2
+  const n = 14, w = 10; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y1); g.lineTo(x, y1 + 6);
+  for (let i = 1; i < n; i++) g.lineTo(x + (i % 2 ? -w : w), y1 + 6 + (y2 - y1 - 12) * i / n);
+  g.lineTo(x, y2 - 6); g.lineTo(x, y2); g.stroke();
+}
+
+function draw() {
+  const { k1, k2, k } = K(), m = +$('m').value, F = m * G, x = k > 0 ? F / k : 0;
+  const x1 = mode === 'par' ? x : F / k1, x2 = mode === 'par' ? x : F / k2;
+  { const [g, W, H] = setup($('c')), top = 20, sc = (H - 90) / (2 * L0 + 0.8), cx = W / 2;
+    g.fillStyle = '#b8b2a3'; g.fillRect(cx - 80, top - 10, 160, 10);
+    let bottom;
+    if (mode === 'one') { bottom = top + (L0 + x1) * sc; spring(g, cx, top, bottom, '#2563eb'); }
+    else if (mode === 'ser') { const mid = top + (L0 + x1) * sc; spring(g, cx, top, mid, '#2563eb'); g.fillStyle = '#1d1d1f'; g.fillRect(cx - 6, mid - 2, 12, 4); bottom = mid + (L0 + x2) * sc; spring(g, cx, mid, bottom, '#16a34a'); }
+    else { bottom = top + (L0 + x) * sc; spring(g, cx - 30, top, bottom, '#2563eb'); spring(g, cx + 30, top, bottom, '#16a34a'); g.fillStyle = '#1d1d1f'; g.fillRect(cx - 40, bottom - 2, 80, 4); }
+    const bw = 30 + 20 * m; g.fillStyle = '#6b6b70'; g.fillRect(cx - bw / 2, bottom, bw, 26);
+    g.fillStyle = '#fff'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(fmt(m, 1) + ' кг', cx, bottom + 17);
+    // линейка: положение груза без нагрузки и под нагрузкой
+    const b0 = top + (mode === 'ser' ? 2 * L0 : L0) * sc;
+    g.strokeStyle = '#dc2626'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx - 110, b0); g.lineTo(cx + 110, b0); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#dc2626'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('без груза', cx + 60, b0 - 4);
+    g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + 95, b0); g.lineTo(cx + 95, bottom); g.stroke();
+    g.fillText('x = ' + fmt((mode === 'ser' ? x1 + x2 : x) * 100, 1) + ' см', cx + 100, (b0 + bottom) / 2 + 4);
+  }
+  { // график F(x)
+    const [g, W, H] = setup($('g')), L = 44, R = 10, Tp = 24, B = 28, XM = 0.8, FM = 20;
+    const sx = v => L + v / XM * (W - L - R), sy = f => H - B - f / FM * (H - Tp - B);
+    g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let f = 0; f <= FM; f += 5) { g.beginPath(); g.moveTo(L, sy(f)); g.lineTo(W - R, sy(f)); g.stroke(); g.fillText(f, L - 4, sy(f) + 4); }
+    g.textAlign = 'center'; for (let v = 0; v <= XM + 1e-9; v += 0.2) { g.beginPath(); g.moveTo(sx(v), Tp); g.lineTo(sx(v), H - B); g.stroke(); g.fillText(fmt(v * 100, 0), sx(v), H - B + 14); }
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('F, Н', L, 14); g.textAlign = 'right'; g.font = '11px system-ui'; g.fillText('x, см', W - R, H - 4);
+    g.save(); g.beginPath(); g.rect(L, Tp, W - L - R, H - Tp - B); g.clip();
+    const line = (kk, col, w, dash) => { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); g.moveTo(sx(0), sy(0)); g.lineTo(sx(XM), sy(kk * XM)); g.stroke(); g.setLineDash([]); };
+    line(k1, '#2563eb', 1.5, [4, 4]); if (mode !== 'one') line(k2, '#16a34a', 1.5, [4, 4]); line(k, '#dc2626', 3);
+    const xs = mode === 'ser' ? x1 + x2 : x; g.fillStyle = '#dc2626'; g.beginPath(); g.arc(sx(xs), sy(F), 5, 0, 7); g.fill();
+    g.restore();
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('пунктир — отдельные пружины, красная — система', L + 4, Tp + 12);
+  }
+  $('k1o').textContent = k1 + ' Н/м'; $('k2o').textContent = mode === 'one' ? '—' : k2 + ' Н/м'; $('mo').textContent = fmt(m, 1) + ' кг';
+  $('read').innerHTML = ro('сила тяжести груза', fmt(F, 1) + ' Н') + ro('жёсткость системы', fmt(k, 1) + ' Н/м') +
+    ro('общее удлинение', fmt((mode === 'ser' ? x1 + x2 : x) * 100, 2) + ' см') +
+    ro('сила на пружину 1', fmt(mode === 'par' ? k1 * x : F, 2) + ' Н', 'c1') + ro('сила на пружину 2', mode === 'one' ? '—' : fmt(mode === 'par' ? k2 * x : F, 2) + ' Н', 'c2');
+}
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m; $('k2s').toggleAttribute('data-off', mode === 'one'); draw(); });
+['k1', 'k2', 'm'].forEach(id => $(id).oninput = draw);
+$('k2s').toggleAttribute('data-off', true);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

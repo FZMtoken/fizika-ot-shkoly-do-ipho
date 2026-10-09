@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Поворот и вираж</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .ok { color:#16a34a; } .no { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off], .row button[data-off] { visibility:hidden; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Поворот и вираж</h1>
+  <p class="lead">К центру поворота автомобиль «тянет» сила трения покоя, а на вираже ещё и наклонённая сила реакции дороги.
+    Если нужной силы не хватает — начинается занос. Масса автомобиля 1 т.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="turn" class="on">Поворот (вид сверху)</button><button data-m="bank">Вираж (разрез)</button></div>
+    <div class="controls">
+      <label>Скорость v:<span id="vo"></span><input id="v" type="range" min="5" max="40" step="0.5" value="15"></label>
+      <label>Радиус поворота R:<span id="Ro"></span><input id="R" type="range" min="20" max="150" step="5" value="50"></label>
+      <label>Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+      <label class="slot" id="als">Наклон виража α:<span id="alo"></span><input id="al" type="range" min="0" max="40" step="1" value="15"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>В режиме «Поворот» увеличивай скорость, пока автомобиль не сорвётся в занос. Сравни с √(μgR).</li>
+      <li>Уменьши коэффициент трения, как на мокрой дороге. Как изменилась предельная скорость?</li>
+      <li>В режиме «Вираж» найди скорость, при которой трение вообще не нужно.</li>
+      <li>На вираже поставь маленькую скорость и маленькое трение. Почему автомобиль сползает вниз?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => !isFinite(n) ? '—' : (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let mode = 'turn', phi = 0, skid = null, running = false, last = null, t = 0;
+const P = () => ({ v: +$('v').value, R: +$('R').value, mu: +$('mu').value, al: +$('al').value * Math.PI / 180 });
+function bank(p) {       // сила трения f (по склону к центру, на единицу массы) и сила реакции N/m
+  const ac = p.v * p.v / p.R, N = G * Math.cos(p.al) + ac * Math.sin(p.al), f = ac * Math.cos(p.al) - G * Math.sin(p.al);
+  const vIdeal = Math.sqrt(G * p.R * Math.tan(p.al));
+  const den = Math.cos(p.al) - p.mu * Math.sin(p.al), vMax = den > 0 ? Math.sqrt(G * p.R * (Math.sin(p.al) + p.mu * Math.cos(p.al)) / den) : Infinity;
+  const num = Math.sin(p.al) - p.mu * Math.cos(p.al), vMin = num > 0 ? Math.sqrt(G * p.R * num / (Math.cos(p.al) + p.mu * Math.sin(p.al))) : 0;
+  return { ac, N, f, ok: Math.abs(f) <= p.mu * N + 1e-9, vIdeal, vMax, vMin };
+}
+function arrow(g, x1, y1, x2, y2, col, lab) { const L = Math.hypot(x2 - x1, y2 - y1); if (L < 4) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14, y2 + uy * 14 + 4); }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P();
+  $('vo').textContent = fmt(p.v) + ' м/с = ' + fmt(p.v * 3.6, 0) + ' км/ч'; $('Ro').textContent = p.R + ' м'; $('muo').textContent = fmt(p.mu, 2); $('alo').textContent = $('al').value + '°';
+  if (mode === 'turn') {
+    const need = p.v * p.v / p.R, max = p.mu * G, ok = need <= max + 1e-9;
+    const cx = W / 2, cy = H / 2, k = (Math.min(W, H) / 2 - 30) / 150, Rp = p.R * k;
+    g.fillStyle = '#e5e7eb'; g.beginPath(); g.arc(cx, cy, Rp + 14, 0, 7); g.arc(cx, cy, Math.max(0, Rp - 14), 0, 7, true); g.fill();
+    g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, cy, 3, 0, 7); g.fill();
+    let X, Y, dir;
+    if (skid) { X = skid.x + skid.dx * skid.d * k; Y = skid.y + skid.dy * skid.d * k; dir = Math.atan2(skid.dy, skid.dx); }
+    else { X = cx + Rp * Math.cos(phi); Y = cy - Rp * Math.sin(phi); dir = Math.atan2(-Math.cos(phi), -Math.sin(phi)); }
+    g.save(); g.translate(X, Y); g.rotate(dir); g.fillStyle = skid ? '#dc2626' : '#2563eb'; g.fillRect(-14, -8, 28, 16); g.restore();
+    if (!skid) {
+      const fs = 5, fr = Math.min(need, max);
+      arrow(g, X, Y, X - Math.cos(phi) * fr * fs, Y + Math.sin(phi) * fr * fs, '#dc2626', 'Fтр');
+      arrow(g, X, Y, X - Math.sin(phi) * 40, Y - Math.cos(phi) * 40, '#2563eb', 'v');
+    }
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left';
+    g.fillText(skid ? 'Занос: трения не хватило, автомобиль ушёл по касательной' : ok ? 'Трения хватает' : 'Трения не хватит — начнётся занос', 10, 20);
+    $('read').innerHTML = ro('нужно: v²/R', fmt(need, 2) + ' м/с²') + ro('может трение: μg', fmt(max, 2) + ' м/с²') +
+      ro('предельная скорость √(μgR)', fmt(Math.sqrt(max * p.R)) + ' м/с') + ro('итог', ok ? 'проходит поворот' : 'занос', ok ? 'ok' : 'no') + ro('запас по трению', fmt(max / Math.max(need, 1e-9), 2) + ' раза');
+  } else {
+    const b = bank(p), cx = W / 2, by = H * 0.62, L = Math.min(W * 0.8, 520);
+    // полотно наклонено внутрь: центр поворота слева
+    const ux = Math.cos(p.al), uy = -Math.sin(p.al);          // вдоль полотна вправо-вверх (экранные оси)
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 4; g.beginPath(); g.moveTo(cx - ux * L / 2, by + Math.sin(p.al) * L / 2); g.lineTo(cx + ux * L / 2, by - Math.sin(p.al) * L / 2); g.stroke();
+    g.fillStyle = '#d9d6cc'; g.beginPath(); g.moveTo(cx - ux * L / 2, by + Math.sin(p.al) * L / 2); g.lineTo(cx + ux * L / 2, by - Math.sin(p.al) * L / 2); g.lineTo(cx + ux * L / 2, H); g.lineTo(cx - ux * L / 2, H); g.fill();
+    g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('← к центру поворота', 10, 20);
+    g.save(); g.translate(cx, by); g.rotate(-p.al); g.fillStyle = b.ok ? '#2563eb' : '#dc2626'; g.fillRect(-30, -26, 60, 26); g.restore();
+    const ox = cx - Math.sin(p.al) * 13, oy = by - Math.cos(p.al) * 13, fs = 9;   // центр автомобиля; пикселей на 1 м/с² (на единицу массы)
+    arrow(g, ox, oy, ox, oy + G * fs, '#16a34a', 'mg');
+    arrow(g, ox, oy, ox - Math.sin(p.al) * b.N * fs, oy - Math.cos(p.al) * b.N * fs, '#9333ea', 'N');
+    const fAct = Math.max(-p.mu * b.N, Math.min(p.mu * b.N, b.f));
+    arrow(g, cx - ux * 32, by - uy * 0 + Math.sin(p.al) * 32 + 4, cx - ux * 32 - ux * fAct * fs, by + Math.sin(p.al) * 32 + 4 + Math.sin(p.al) * fAct * fs, '#dc2626', 'Fтр');
+    arrow(g, ox, oy - 70, ox - b.ac * fs, oy - 70, '#1d1d1f', 'a = v²/R');
+    $('read').innerHTML = ro('нужное трение', (b.f >= 0 ? 'вниз по склону ' : 'вверх по склону ') + fmt(Math.abs(b.f), 2) + ' кН') +
+      ro('предел трения μN', fmt(p.mu * b.N, 2) + ' кН') + ro('скорость без трения', fmt(b.vIdeal) + ' м/с') +
+      ro('допустимые скорости', `${fmt(b.vMin)}…${isFinite(b.vMax) ? fmt(b.vMax) : '∞'} м/с`) + ro('итог', b.ok ? 'держится' : b.f > 0 ? 'выносит наружу' : 'сползает вниз', b.ok ? 'ok' : 'no');
+  }
+}
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000), p = P(); t += dt;
+    if (mode === 'turn') {
+      if (skid) { skid.d += p.v * dt; if (skid.d > 200) { running = false; $('play').textContent = '▶ Пуск'; } }
+      else { phi += p.v / p.R * dt;
+        if (p.v * p.v / p.R > p.mu * G + 1e-9 && t > 0.6) { const c = $('c'), W = c.clientWidth, H = +(c.dataset.h || 360), k = (Math.min(W, H) / 2 - 30) / 150;
+          skid = { x: W / 2 + p.R * k * Math.cos(phi), y: H / 2 - p.R * k * Math.sin(phi), dx: -Math.sin(phi), dy: -Math.cos(phi), d: 0 }; } } } }
+  last = ts; draw(); if (running) requestAnimationFrame(tick);
+}
+function reset() { running = false; skid = null; phi = 0; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (skid) reset(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m;
+  $('als').toggleAttribute('data-off', mode === 'turn'); ['play', 'reset'].forEach(id => $(id).toggleAttribute('data-off', mode === 'bank')); reset(); });
+['v', 'R', 'mu', 'al'].forEach(id => $(id).oninput = () => { if (skid) reset(); else draw(); });
+$('als').toggleAttribute('data-off', true);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

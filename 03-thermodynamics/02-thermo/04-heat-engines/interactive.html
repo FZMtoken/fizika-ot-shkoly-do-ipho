@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Цикл Карно</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Цикл Карно</h1>
+  <p class="lead">1 моль гелия проходит цикл Карно: 1→2 изотерма при T₁ (газ получает теплоту), 2→3 адиабата, 3→4 изотерма при T₂ (газ отдаёт теплоту), 4→1 адиабата. Закрашенная площадь — работа за цикл. Ось объёма логарифмическая, чтобы цикл был виден целиком.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Температура нагревателя T₁</i><span id="T1o"></span><input id="T1" type="range" min="400" max="1200" step="10" value="600"></label>
+      <label><i>Температура холодильника T₂</i><span id="T2o"></span><input id="T2" type="range" min="200" max="1150" step="10" value="300"></label>
+      <label><i>Расширение на изотерме V₂/V₁</i><span id="ro"></span><input id="r" type="range" min="1.5" max="4" step="0.1" value="2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Запусти цикл. На каких участках газ получает теплоту, на каких отдаёт, а где теплообмена нет?</li>
+      <li>Повысь T₁ с 600 К до 900 К. Как изменились КПД и работа за цикл?</li>
+      <li>Увеличь расширение V₂/V₁. Меняется ли КПД? А работа?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31, G = 5 / 3, V1 = 5;                               // объём в л, давление в кПа (кПа·л = Дж)
+const NAMES = ['1→2: получает Q₁', '2→3: Q = 0', '3→4: отдаёт Q₂', '4→1: Q = 0'];
+let t = 0, running = false, last = null, u = 0;
+
+function cyc() {
+  const T1 = +$('T1').value; let T2 = +$('T2').value;
+  if (T2 > T1 - 50) { T2 = T1 - 50; $('T2').value = T2; }
+  const r = +$('r').value, k = (T1 / T2) ** (1 / (G - 1)), V = [V1, V1 * r, V1 * r * k, V1 * k];
+  return { T1, T2, r, V };
+}
+function pointAt(c, uu) {                                        // uu ∈ [0, 4): номер участка + доля
+  const i = Math.floor(uu) % 4, f = uu - Math.floor(uu), Va = c.V[i], Vb = c.V[(i + 1) % 4], v = Va * (Vb / Va) ** f;
+  let T; if (i === 0) T = c.T1; else if (i === 2) T = c.T2; else T = (i === 1 ? c.T1 : c.T2) * (Va / v) ** (G - 1);
+  return { V: v, p: R * T / v, T, i };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cy = cyc(), x0 = 56, y0 = 16, w = W - x0 - 16, h = H - 48;
+  const lmin = Math.log(V1 * 0.8), lmax = Math.log(cy.V[2] * 1.25), PMAX = R * cy.T1 / V1 * 1.12;
+  const X = v => x0 + w * (Math.log(v) - lmin) / (lmax - lmin), Y = p => y0 + h - h * p / PMAX;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y0 + h); g.lineTo(x0 + w, y0 + h); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center';
+  [5, 10, 20, 50, 100, 200, 500, 1000].forEach(v => { if (v >= V1 * 0.8 && v <= cy.V[2] * 1.25) g.fillText(v, X(v), y0 + h + 14); });
+  g.textAlign = 'right'; const ps = PMAX > 1500 ? 500 : PMAX > 600 ? 200 : 100;
+  for (let p = ps; p < PMAX; p += ps) g.fillText(p, x0 - 4, Y(p) + 4);
+  g.fillText('V, л (лог. шкала)', x0 + w, y0 + h + 30); g.textAlign = 'left'; g.fillText('p, кПа', x0 + 4, y0 + 10);
+  // площадь цикла
+  g.fillStyle = 'rgba(124,58,237,.15)'; g.beginPath();
+  for (let j = 0; j <= 400; j++) { const q = pointAt(cy, j / 100 * 0.99999); j ? g.lineTo(X(q.V), Y(q.p)) : g.moveTo(X(q.V), Y(q.p)); } g.closePath(); g.fill();
+  const COL = ['#dc2626', '#64748b', '#2563eb', '#64748b'], cur = pointAt(cy, u);
+  for (let i = 0; i < 4; i++) { g.strokeStyle = COL[i]; g.lineWidth = i === cur.i && (running || u > 0) ? 4 : 2; g.beginPath();
+    for (let j = 0; j <= 60; j++) { const q = pointAt(cy, i + j / 60 * 0.99999); j ? g.lineTo(X(q.V), Y(q.p)) : g.moveTo(X(q.V), Y(q.p)); } g.stroke(); }
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui';
+  for (let i = 0; i < 4; i++) { const q = pointAt(cy, i); g.beginPath(); g.arc(X(q.V), Y(q.p), 3.5, 0, 7); g.fill(); g.fillText(String(i + 1), X(q.V) + 6, Y(q.p) - 6); }
+  g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(X(cur.V), Y(cur.p), 7, 0, 7); g.fill();
+  const Q1 = R * cy.T1 * Math.log(cy.r), Q2 = R * cy.T2 * Math.log(cy.r);
+  $('T1o').textContent = cy.T1 + ' К'; $('T2o').textContent = cy.T2 + ' К'; $('ro').textContent = fmt(cy.r, 1);
+  $('read').innerHTML = ro('участок', NAMES[cur.i]) + ro('теплота от нагревателя Q₁', fmt(Q1, 0) + ' Дж') + ro('теплота холодильнику Q₂', fmt(Q2, 0) + ' Дж') +
+    ro('работа за цикл A', fmt(Q1 - Q2, 0) + ' Дж') + ro('КПД = 1 − T₂/T₁', fmt(100 * (1 - cy.T2 / cy.T1), 1) + ' %');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; u = (u + dt * 0.5) % 4; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; u = 0; $('T1').value = 600; $('T2').value = 300; $('r').value = 2; draw(); };
+['T1', 'T2', 'r'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

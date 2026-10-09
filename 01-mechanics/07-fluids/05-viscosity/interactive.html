@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Шарик в вязкой жидкости</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; padding:6px 12px; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Шарик в вязкой жидкости</h1>
+  <p class="lead">Шарик отпускают у поверхности жидкости в высоком цилиндре (50 см). Сила сопротивления учитывает и вязкое (Стокс), и вихревое (квадратичное) слагаемое. Справа — график скорости и пунктир — скорость по формуле Стокса.</p>
+
+  <div class="card">
+    <div class="seg" id="liq"><button data-r="1260" data-e="1.5" class="on">глицерин</button><button data-r="960" data-e="1">касторовое масло</button><button data-r="1400" data-e="10">мёд</button><button data-r="1000" data-e="0.001">вода</button></div>
+    <div class="seg" id="mat"><button data-r="7800" class="on">сталь</button><button data-r="2500">стекло</button><button data-r="11300">свинец</button></div>
+    <div class="controls">
+      <label><i>Радиус шарика r</i><span id="ro"></span><input id="r" type="range" min="0.5" max="3" step="0.1" value="1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Бросить</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Брось стальной шарик в глицерин, а потом в воду. Сравни, как быстро устанавливается скорость.</li>
+      <li>Увеличь радиус вдвое. Во сколько раз выросла установившаяся скорость в глицерине?</li>
+      <li>Следи за числом Рейнольдса. В какой жидкости формула Стокса перестаёт работать?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, DEPTH = 0.5, CQ = 0.5;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let liq = { rho: 1260, eta: 1.5 }, rhoB = 7800, speed = 1, t = 0, y = 0, v = 0, hist = [], running = false, last = null;
+
+function par() { const r = +$('r').value / 1000, V = 4 / 3 * Math.PI * r ** 3, m = rhoB * V;
+  return { r, m, Fd: (rhoB - liq.rho) * V * G, vSt: 2 * r * r * (rhoB - liq.rho) * G / (9 * liq.eta) }; }
+const drag = (p, u) => 6 * Math.PI * liq.eta * p.r * u + CQ * liq.rho * Math.PI * p.r * p.r * u * u / 2;
+function vTerm(p) { let lo = 0, hi = 50; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; drag(p, mid) < p.Fd ? lo = mid : hi = mid; } return lo; }
+
+function step(dt) {
+  const p = par(), mEff = p.m + liq.rho * 4 / 3 * Math.PI * p.r ** 3 / 2;     // с присоединённой массой жидкости
+  const n = 50, h = dt / n;
+  const kl = 6 * Math.PI * liq.eta * p.r, kq = CQ * liq.rho * Math.PI * p.r * p.r / 2;
+  // линейное (вязкое) слагаемое — неявно: в мёде время релаксации меньше шага, явная схема разошлась бы
+  for (let i = 0; i < n; i++) { v = (v + h * (p.Fd - kq * v * v) / mEff) / (1 + h * kl / mEff); y += v * h; t += h; if (y >= DEPTH) { y = DEPTH; break; } }
+  hist.push([t, v]);
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), vt = vTerm(p), top = 20, bot = H - 20, cx = 70;
+  // цилиндр
+  g.fillStyle = liq.eta >= 10 ? '#fcd34d' : liq.eta >= 1 && liq.rho > 1000 ? '#e0e7ff' : liq.eta >= 1 ? '#fef3c7' : '#bfdbfe';
+  g.fillRect(cx - 30, top, 60, bot - top); g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.strokeRect(cx - 30, top, 60, bot - top);
+  const by = top + (bot - top) * y / DEPTH, br = Math.max(3, p.r * 4000);
+  g.fillStyle = rhoB > 10000 ? '#475569' : rhoB > 5000 ? '#64748b' : '#a5f3fc'; g.beginPath(); g.arc(cx, Math.min(bot - br, by + br), br, 0, 7); g.fill();
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('50 см', cx + 34, bot);
+  // график v(t)
+  const gx = cx + 90, gw = W - gx - 20, gy = top, gh = bot - top - 20;
+  if (gw > 80) {
+    const tEnd = Math.max(0.3, DEPTH / Math.max(vt, 1e-6) * 1.1, hist.length ? hist[hist.length - 1][0] : 0), vmax = Math.max(vt, p.vSt < 3 * vt ? p.vSt : vt) * 1.25 || 1;
+    const X = q => gx + gw * q / tEnd, Y = u => gy + gh - gh * u / vmax;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('v, мм/с', gx + 4, gy + 10); g.textAlign = 'right'; g.fillText('t, с', gx + gw, gy + gh + 14);
+    g.fillText(fmt(vmax * 1000, 1), gx - 4, gy + 8); g.fillText(fmt(tEnd, 1), gx + gw, gy + gh + 28);
+    if (p.vSt <= vmax) { g.setLineDash([6, 4]); g.strokeStyle = '#d97706'; g.beginPath(); g.moveTo(gx, Y(p.vSt)); g.lineTo(gx + gw, Y(p.vSt)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = '#d97706'; g.textAlign = 'left'; g.fillText('по Стоксу', gx + 6, Y(p.vSt) - 4); }
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath(); hist.forEach(([q, u], i) => i ? g.lineTo(X(q), Y(u)) : g.moveTo(X(q), Y(u))); g.stroke();
+  }
+  const Re = liq.rho * v * 2 * p.r / liq.eta, ReT = liq.rho * vt * 2 * p.r / liq.eta;
+  $('ro').textContent = fmt(+$('r').value, 1) + ' мм';
+  $('read').innerHTML = ro('скорость сейчас', fmt(v * 1000, 1) + ' мм/с') + ro('установившаяся', fmt(vt * 1000, 1) + ' мм/с') + ro('по формуле Стокса', fmt(p.vSt * 1000, 1) + ' мм/с') +
+    ro('число Рейнольдса', ReT < 10 ? fmt(ReT, 3) : fmt(ReT, 0)) + ro('режим', ReT < 1 ? 'вязкий (Стокс)' : ReT < 1000 ? 'переходный' : 'вихревой') + ro('пройдено', fmt(y * 100, 1) + ' см') + ro('время', fmt(t, 1) + ' с' + (speed > 1.01 ? ' (показ ×' + fmt(speed, 0) + ')' : ''));
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  step(dt * speed); draw();
+  if (y >= DEPTH) { running = false; $('play').textContent = '▶ Бросить'; return; }
+  requestAnimationFrame(tick);
+}
+const reset = () => { speed = Math.max(1, DEPTH / (vTerm(par()) * 8)); running = false; t = 0; y = 0; v = 0; hist = [[0, 0]]; $('play').textContent = '▶ Бросить'; draw(); };
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Бросить'; return; }
+  if (y >= DEPTH) reset(); running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('liq').querySelectorAll('button').forEach(b => b.onclick = () => { $('liq').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); liq = { rho: +b.dataset.r, eta: +b.dataset.e }; reset(); });
+$('mat').querySelectorAll('button').forEach(b => b.onclick = () => { $('mat').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); rhoB = +b.dataset.r; reset(); });
+$('r').oninput = reset;
+window.onresize = draw;
+reset();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

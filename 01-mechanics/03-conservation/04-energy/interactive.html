@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Энергия и тормозной путь</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .ek { color:#2563eb; } .wf { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 9.5em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Энергия и тормозной путь</h1>
+  <p class="lead">При торможении сила трения совершает отрицательную работу, и кинетическая энергия автомобиля превращается в тепло.
+    <b class="ek">Синий</b> столбик — кинетическая энергия, <b class="wf">красный</b> — работа силы трения по модулю.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Скорость v:<span id="vo"></span><input id="v" type="range" min="10" max="150" step="2" value="72"></label>
+      <label>Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0.1" max="0.9" step="0.05" value="0.7"></label>
+      <label>Масса автомобиля m:<span id="mo"></span><input id="m" type="range" min="800" max="2400" step="100" value="1200"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Тормозить</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь 36 км/ч, потом 72 км/ч. Во сколько раз выросли кинетическая энергия и тормозной путь?</li>
+      <li>Уменьши коэффициент трения, как на мокрой дороге. Как изменился тормозной путь? А работа силы трения?</li>
+      <li>Увеличь массу. Почему тормозной путь не изменился, хотя энергия выросла?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let s = 0, running = false, last = null, tm = 0;
+const P = () => ({ v0: +$('v').value / 3.6, mu: +$('mu').value, m: +$('m').value });
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), S = p.v0 * p.v0 / (2 * p.mu * G), a = p.mu * G, E0 = p.m * p.v0 ** 2 / 2;
+  const v = Math.sqrt(Math.max(0, p.v0 ** 2 - 2 * a * s)), Ek = p.m * v * v / 2, Wf = p.mu * p.m * G * s;
+  // дорога: масштаб по наибольшему тормозному пути (150 км/ч при μ = 0,1)
+  const roadW = W - 150, SMAX = 180, k = roadW / SMAX, gy = H - 40;
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, roadW + 20, H - gy);
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = 0; x <= SMAX; x += 30) { g.fillRect(10 + x * k, gy, 1, 6); g.fillText(x + ' м', 10 + x * k, gy + 18); }
+  g.strokeStyle = '#dc2626'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(10 + Math.min(S, SMAX) * k, gy - 50); g.lineTo(10 + Math.min(S, SMAX) * k, gy); g.stroke(); g.setLineDash([]);
+  const cx = 10 + Math.min(s, SMAX) * k; g.fillStyle = '#2563eb'; g.fillRect(cx - 34, gy - 22, 34, 16); g.fillRect(cx - 26, gy - 32, 18, 10);
+  g.fillStyle = '#333'; for (const wx of [cx - 27, cx - 8]) { g.beginPath(); g.arc(wx, gy - 5, 5, 0, 7); g.fill(); }
+  // столбики энергии
+  const bx = roadW + 40, bh = gy - 30, EM = 2400 * (150 / 3.6) ** 2 / 2, sc = v => Math.min(1, v / Math.max(E0, 1)) * bh;
+  g.fillStyle = '#2563eb'; g.fillRect(bx, gy - sc(Ek), 30, sc(Ek));
+  g.fillStyle = '#dc2626'; g.fillRect(bx + 44, gy - sc(Wf), 30, sc(Wf));
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(bx - 4, gy - bh); g.lineTo(bx + 78, gy - bh); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText('Eк', bx + 15, gy + 16); g.fillText('|Aтр|', bx + 59, gy + 16);
+  g.font = '11px system-ui'; g.fillStyle = '#6b6b70'; g.fillText('начальная Eк', bx + 37, gy - bh - 6);
+  $('vo').textContent = $('v').value + ' км/ч = ' + fmt(p.v0) + ' м/с'; $('muo').textContent = fmt(p.mu, 2); $('mo').textContent = p.m + ' кг';
+  $('read').innerHTML = ro('кинетическая энергия', fmt(Ek / 1000) + ' кДж', 'ek') + ro('работа трения (модуль)', fmt(Wf / 1000) + ' кДж', 'wf') +
+    ro('тормозной путь', fmt(S) + ' м') + ro('как падение с высоты', fmt(p.v0 ** 2 / (2 * G)) + ' м') + ro('это этаж', '≈ ' + fmt(p.v0 ** 2 / (2 * G) / 3, 0) + '-й');
+}
+function tick(ts) { if (!running) return; const p = P(), a = p.mu * G, S = p.v0 ** 2 / (2 * a);
+  if (last !== null) { tm += Math.min(0.05, (ts - last) / 1000); s = Math.min(S, p.v0 * tm - a * tm * tm / 2); if (tm >= p.v0 / a) { s = S; running = false; $('play').textContent = '▶ Тормозить'; } }
+  last = ts; draw(); if (running) requestAnimationFrame(tick); }
+function reset() { running = false; s = 0; tm = 0; $('play').textContent = '▶ Тормозить'; draw(); }
+$('play').onclick = () => { if (s > 0 && !running && tm >= P().v0 / (P().mu * G)) reset(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Тормозить'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['v', 'mu', 'm'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

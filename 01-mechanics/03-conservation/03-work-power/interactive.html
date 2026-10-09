@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Работа силы</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .fa { color:#2563eb; } .fr { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Работа силы</h1>
+  <p class="lead">Ящик массой 10 кг тянут силой F под углом α к горизонту. Работу совершает только составляющая силы вдоль перемещения:
+    A = F·s·cos α. На графике работа — площадь.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Сила F:<span id="Fo"></span><input id="F" type="range" min="0" max="100" step="5" value="60"></label>
+      <label>Угол α:<span id="ao"></span><input id="a" type="range" min="0" max="90" step="5" value="30"></label>
+      <label>Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0" max="0.5" step="0.05" value="0.2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="scene" height="130"></canvas>
+    <canvas id="g" height="220"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>При каком угле работа силы тяги на 4 м наибольшая? Когда она равна нулю?</li>
+      <li>Включи трение. Какой знак у работы силы трения? Почему работа силы тяжести и силы реакции равна нулю?</li>
+      <li>Сравни сумму работ всех сил с кинетической энергией ящика. Что замечаешь?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, M = 10, S = 4;           // масса ящика, путь, м
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let x = 0, v = 0, tm = 0, running = false, last = null;
+function forces() {
+  const F = +$('F').value, al = +$('a').value * Math.PI / 180, mu = +$('mu').value;
+  const N = Math.max(0, M * G - F * Math.sin(al)), Fx = F * Math.cos(al);
+  const moving = v > 1e-9 || Fx > mu * N;
+  const Ftr = moving ? mu * N : Fx;
+  return { F, al, mu, N, Fx, Ftr, moving, a: moving ? (Fx - mu * N) / M : 0 };
+}
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+function arrow(g, x1, y1, x2, y2, col, lab) { const L = Math.hypot(x2 - x1, y2 - y1); if (L < 4) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14, y2 + uy * 14 + 4); }
+
+function draw() {
+  const f = forces();
+  { const [g, W, H] = setup($('scene')), gy = H - 24, k = (W - 180) / S, bx = 30 + x * k, bw = 60, bh = 40;
+    g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, W, H - gy);
+    g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+    for (let m = 0; m <= S; m++) { g.fillRect(30 + bw / 2 + m * k, gy, 1, 6); g.fillText(m + ' м', 30 + bw / 2 + m * k, gy + 18); }
+    g.fillStyle = '#b45309'; g.fillRect(bx, gy - bh, bw, bh);
+    const cx = bx + bw / 2, cy = gy - bh / 2, fs = 0.8;
+    arrow(g, cx, cy, cx + Math.cos(f.al) * f.F * fs, cy - Math.sin(f.al) * f.F * fs, '#2563eb', 'F');
+    arrow(g, bx, gy - 4, bx - f.Ftr * fs, gy - 4, '#dc2626', 'Fтр');
+  }
+  { const [g, W, H] = setup($('g')), L = 44, R = 10, Tp = 22, B = 26, FM = 100;
+    const sx = xx => L + xx / S * (W - L - R), sy = F => Tp + (FM - F) / (2 * FM) * (H - Tp - B);
+    g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let F = -FM; F <= FM; F += 25) { g.beginPath(); g.moveTo(L, sy(F)); g.lineTo(W - R, sy(F)); g.stroke(); g.fillText(F, L - 4, sy(F) + 4); }
+    g.textAlign = 'center'; for (let m = 0; m <= S; m++) g.fillText(m, sx(m), H - 8);
+    g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, sy(0)); g.lineTo(W - R, sy(0)); g.stroke();
+    g.fillStyle = 'rgba(37,99,235,.25)'; g.fillRect(sx(0), sy(f.Fx), sx(x) - sx(0), sy(0) - sy(f.Fx));
+    g.fillStyle = 'rgba(220,38,38,.25)'; g.fillRect(sx(0), sy(0), sx(x) - sx(0), sy(-f.Ftr) - sy(0));
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath(); g.moveTo(sx(0), sy(f.Fx)); g.lineTo(sx(S), sy(f.Fx)); g.stroke();
+    g.strokeStyle = '#dc2626'; g.beginPath(); g.moveTo(sx(0), sy(-f.Ftr)); g.lineTo(sx(S), sy(-f.Ftr)); g.stroke();
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('проекции сил на направление движения, Н', L, 14);
+    g.textAlign = 'right'; g.font = '11px system-ui'; g.fillText('x, м', W - R, H - 8);
+  }
+  const AF = f.Fx * x, Atr = -f.Ftr * x, Ek = M * v * v / 2;
+  $('Fo').textContent = fmt(f.F, 0) + ' Н'; $('ao').textContent = $('a').value + '°'; $('muo').textContent = fmt(f.mu, 2);
+  $('read').innerHTML = ro('работа силы F', fmt(AF) + ' Дж', 'fa') + ro('работа трения', fmt(Atr) + ' Дж', 'fr') + ro('работа mg и N', '0 Дж') +
+    ro('сумма работ', fmt(AF + Atr) + ' Дж') + ro('кинетическая энергия', fmt(Ek) + ' Дж') + ro('путь', fmt(x, 2) + ' м');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000), f = forces(); if (!f.moving) { running = false; $('play').textContent = '▶ Пуск'; draw(); return; }
+    // сила постоянна — движение равноускоренное, считаем точно, чтобы сумма работ совпадала с энергией
+    tm += dt; x = f.a * tm * tm / 2; v = f.a * tm;
+    if (x >= S) { x = S; v = Math.sqrt(2 * f.a * S); running = false; $('play').textContent = '▶ Пуск'; draw(); return; } }
+  last = ts; draw(); requestAnimationFrame(tick); }
+function reset() { running = false; x = 0; v = 0; tm = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (x >= S) reset(); running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['F', 'a', 'mu'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

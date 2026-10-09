@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Блоки и полиспаст</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .chk { font-weight:400; display:inline-flex; gap:6px; align-items:center; }
+  #play { min-width: 12em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Блоки и полиспаст</h1>
+  <p class="lead">Подвижную обойму с грузом держат n отрезков одной верёвки. При n = 1 это просто неподвижный блок, при n = 2 — подвижный блок. Справа сравниваются пути и работы.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Число нитей n</i><span id="no"></span><input id="n" type="range" min="1" max="6" step="1" value="2"></label>
+      <label><i>Масса груза</i><span id="mo"></span><input id="m" type="range" min="10" max="200" step="5" value="40"></label>
+      <label><i>Масса подвижной обоймы</i><span id="mbo"></span><input id="mb" type="range" min="0" max="20" step="1" value="0"></label>
+    </div>
+    <div class="row"><label class="chk"><input type="checkbox" id="fr"> Трение в блоках (3% на каждый блок)</label></div>
+    <div class="row"><button class="primary" id="play">▶ Поднять на 1 м</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Подними груз 40 кг подвижным блоком (n = 2). Во сколько раз сила меньше веса груза? Сколько верёвки пришлось вытянуть?</li>
+      <li>Увеличивай n при лёгкой обойме и без трения. Сравни затраченную работу F·s с полезной P·h.</li>
+      <li>Сделай обойму тяжёлой (20 кг) и включи трение. Как меняется КПД для груза 10 кг и 200 кг? Когда полиспаст невыгоден?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['n', 'm', 'mb'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let h = 0, running = false, last = null;
+
+function calc() {
+  const n = +$('n').value, m = +$('m').value, mb = n === 1 ? 0 : +$('mb').value;
+  const eta0 = $('fr').checked ? Math.pow(0.97, n) : 1;                 // число блоков ≈ числу нитей
+  const F = (m + mb) * G / (n * eta0);
+  return { n, m, mb, F, P: m * G, s: n * h, eta: m * G / (n * F) };
+}
+
+function pulley(g, x, y, R) { g.fillStyle = '#e5e7eb'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
+function arrow(g, x1, y1, x2, y2, col, lab) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + 6, y2 - 4); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = calc(), sw = Math.min(W * 0.5, 360), cx = sw / 2, top = 46, k = 120;   // k — пикселей на метр подъёма
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, 0, sw, 16);
+  const R = 13, n = S.n, yb = 250 - h * k;                 // yb — ось нижних блоков (подвижной обоймы)
+  const x = i => cx - (n * R) + R + i * 2 * R;               // отрезок i, слева направо; свободный конец — x(n)
+  // верёвка идёт от свободного конца: через верхний блок вниз (отрезок n−1), под нижним блоком вверх (n−2) и т. д.
+  const tops = [], bots = []; tops.push(n - 1);              // пара (i, i+1) огибает блок между ними
+  for (let i = n - 2, up = false; i >= 0; i--, up = !up) (up ? tops : bots).push(i);
+  const anchorTop = n % 2 === 0;                             // конец отрезка 0 закреплён на потолке или на обойме
+  g.fillStyle = '#6b6b70'; tops.forEach(i => g.fillRect(x(i) + R - 2, 16, 4, top - 16));
+  g.strokeStyle = '#92400e'; g.lineWidth = 2;
+  for (let i = 0; i < n; i++) { const y1 = i === 0 && anchorTop ? 16 : top, y2 = n === 1 ? yb + 14 : (i === 0 && !anchorTop ? yb + R : yb); g.beginPath(); g.moveTo(x(i), y1); g.lineTo(x(i), y2); g.stroke(); }
+  if (n > 1) { g.fillStyle = '#9ca3af'; g.fillRect(x(0) - 8, yb + R - 2, x(n - 1) - x(0) + 16, 10);
+    bots.forEach(i => g.fillRect(x(i) + R - 2, yb, 4, R)); }
+  tops.forEach(i => { pulley(g, x(i) + R, top, R); g.strokeStyle = '#92400e'; g.lineWidth = 2; g.beginPath(); g.arc(x(i) + R, top, R, Math.PI, 0); g.stroke(); });
+  bots.forEach(i => { pulley(g, x(i) + R, yb, R); g.strokeStyle = '#92400e'; g.lineWidth = 2; g.beginPath(); g.arc(x(i) + R, yb, R, 0, Math.PI); g.stroke(); });
+  if (!anchorTop && n > 1) { g.fillStyle = '#92400e'; g.beginPath(); g.arc(x(0), yb + R, 3, 0, 7); g.fill(); }
+  // свободный конец
+  const fx = x(n), handY = 140 + Math.min(S.s, 6) * 30;
+  g.strokeStyle = '#92400e'; g.beginPath(); g.moveTo(fx, top); g.lineTo(fx, handY); g.stroke();
+  arrow(g, fx, handY, fx, handY + 44, '#2563eb', 'F');
+  // груз висит на обойме (или прямо на верёвке при n = 1)
+  const hx = n === 1 ? x(0) : (x(0) + x(n - 1)) / 2, gy = n === 1 ? yb + 14 : yb + R + 26;
+  if (n > 1) { g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(hx, yb + R + 8); g.lineTo(hx, gy); g.stroke(); }
+  const bw = 34 + S.m * 0.18; g.fillStyle = '#dc2626'; g.fillRect(hx - bw / 2, gy, bw, bw * 0.7);
+  g.fillStyle = '#fff'; g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(S.m + ' кг', hx, gy + bw * 0.4);
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, H - 14, sw, 14);
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText(S.n === 1 ? 'неподвижный блок' : S.n === 2 ? 'подвижный блок' : 'полиспаст: обойму держат ' + S.n + ' нит' + (S.n < 5 ? 'и' : 'ей'), cx, H - 22);
+  // столбики: пути и работы
+  const bx = sw + 30, bwid = W - bx - 20, row = (y, lab, val, max, col, txt) => {
+    g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.textAlign = 'left'; g.fillText(lab, bx, y - 6);
+    g.fillStyle = '#f1f1ec'; g.fillRect(bx, y, bwid, 18); g.fillStyle = col; g.fillRect(bx, y, Math.max(0, bwid * val / max), 18);
+    g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText(txt, bx + 6, y + 13); };
+  g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillText('Пути', bx, 34);
+  row(64, 'груз поднят на h', h, 6, '#fca5a5', fmt(h, 2) + ' м'); row(112, 'верёвки вытянуто s = n·h', S.s, 6, '#93c5fd', fmt(S.s, 2) + ' м');
+  g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.fillText('Работа', bx, 170);
+  const Ap = S.P * h, Az = S.F * S.s, Amax = Math.max(1, (S.m + 20) * G / Math.pow(0.97, 6));
+  row(200, 'полезная P·h', Ap, Amax, '#fca5a5', fmt(Ap, 0) + ' Дж'); row(248, 'затраченная F·s', Az, Amax, '#93c5fd', fmt(Az, 0) + ' Дж');
+  g.fillStyle = '#6b6b70'; g.font = '13px system-ui';
+  if (S.n === 1) { g.fillText('Выигрыша в силе нет: блок только', bx, 300); g.fillText('меняет направление силы', bx, 320); }
+  else { g.fillText('Сила меньше веса в ' + fmt(S.P / S.F, 2) + ' раза,', bx, 300); g.fillText('а путь больше пути груза в ' + S.n + ' раз' + (S.n < 5 ? 'а' : ''), bx, 320); }
+  // показания
+  $('no').textContent = S.n; $('mo').textContent = S.m + ' кг'; $('mbo').textContent = S.n === 1 ? 'нет подвижного блока' : S.mb + ' кг';
+  $('read').innerHTML = ro('вес груза P', fmt(S.P, 0) + ' Н') + ro('сила F', fmt(S.F) + ' Н') + ro('КПД', fmt(S.eta * 100) + ' %') +
+    ro('h', fmt(h, 2) + ' м') + ro('s', fmt(S.s, 2) + ' м');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  h = Math.min(1, h + 0.4 * dt); draw();
+  if (h >= 1) { running = false; $('play').textContent = '▶ Поднять на 1 м'; return; }
+  requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Поднять на 1 м'; return; }
+  if (h >= 1) h = 0; running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+const reset = () => { running = false; h = 0; $('play').textContent = '▶ Поднять на 1 м'; draw(); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); $('fr').checked = false; reset(); };
+IDS.forEach(id => $(id).oninput = reset); $('fr').onchange = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

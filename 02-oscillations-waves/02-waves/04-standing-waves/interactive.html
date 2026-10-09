@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Стоячие волны</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Стоячие волны</h1>
+  <p class="lead">Стоячая волна на струне (скорость волн 200 м/с) или в трубе с воздухом (340 м/с). Движение замедлено, частоты в показаниях — настоящие. Красные точки — узлы, пунктир — граница размаха. Для труб показано смещение частиц воздуха вдоль трубы.</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="str" class="on">Струна</button><button data-k="open">Открытая труба</button><button data-k="closed">Закрытая слева труба</button></div>
+    <div class="seg" id="trav"><button data-t="0" class="on">Только стоячая</button><button data-t="1">+ бегущие волны</button></div>
+    <div class="controls">
+      <label><i id="nl">Номер гармоники n</i><span id="no"></span><input id="n" type="range" min="1" max="6" step="1" value="1"></label>
+      <label><i>Длина L</i><span id="Lo"></span><input id="L" type="range" min="0.3" max="1.5" step="0.05" value="0.65"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="290"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>На струне переключай n от 1 до 6. Сколько узлов у n-й гармоники, считая концы? Как растёт частота?</li>
+      <li>Включи «+ бегущие волны». Две волны бегут навстречу; убедись, что в узлах их смещения всегда противоположны.</li>
+      <li>Сравни открытую и закрытую трубы одной длины. Во сколько раз различаются основные тона? Какие гармоники есть у закрытой?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let kind = 'str', trav = 0, t = 0, running = true, last = null;
+
+function par() { const n = +$('n').value, L = +$('L').value, v = kind === 'str' ? 200 : 340;
+  const m = kind === 'closed' ? 2 * n - 1 : n;                                           // номер гармоники в формуле частоты
+  const lam = kind === 'closed' ? 4 * L / m : 2 * L / m, k = 2 * Math.PI / lam;
+  return { n, m, L, v, lam, k, nu: v / lam, wv: Math.PI * (kind === 'closed' ? m / 2 : m) * 0.5 }; }      // wv — замедленная частота для анимации
+const shape = (p, x) => kind === 'open' ? Math.cos(p.k * x) : Math.sin(p.k * x);         // профиль амплитуды: у открытых концов пучности
+const comp = (p, x, q, s) => kind === 'open' ? 0.5 * Math.cos(p.k * x - s * p.wv * q) : 0.5 * Math.sin(p.k * x - s * p.wv * q);   // бегущие составляющие
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 40, sw = W - 2 * x0, len = sw, X = x => x0 + len * x / p.L, cy = 110, amp = 60, Y = s => cy - amp * s;
+  // струна или труба
+  if (kind === 'str') { g.fillStyle = '#d9d6cc'; g.fillRect(x0 - 10, cy - 40, 10, 80); g.fillRect(x0 + len, cy - 40, 10, 80); }
+  else { g.strokeStyle = '#8b6f3a'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0, cy - amp - 12); g.lineTo(x0 + len, cy - amp - 12); g.moveTo(x0, cy + amp + 12); g.lineTo(x0 + len, cy + amp + 12); g.stroke();
+    if (kind === 'closed') { g.fillStyle = '#8b6f3a'; g.fillRect(x0 - 8, cy - amp - 13, 8, 2 * amp + 26); } }
+  // огибающая
+  g.setLineDash([4, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1;
+  [1, -1].forEach(s => { g.beginPath(); for (let j = 0; j <= 300; j++) { const x = p.L * j / 300; j ? g.lineTo(X(x), Y(s * Math.abs(shape(p, x)))) : g.moveTo(X(x), Y(s * Math.abs(shape(p, x)))); } g.stroke(); });
+  g.setLineDash([]);
+  // бегущие составляющие
+  if (trav) [[1, '#16a34a'], [-1, '#d97706']].forEach(([s, col]) => { g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath();
+    for (let j = 0; j <= 300; j++) { const x = p.L * j / 300; j ? g.lineTo(X(x), Y(comp(p, x, t, s))) : g.moveTo(X(x), Y(comp(p, x, t, s))); } g.stroke(); });
+  // стоячая волна
+  const cw = Math.cos(p.wv * t);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 3; g.beginPath();
+  for (let j = 0; j <= 300; j++) { const x = p.L * j / 300; j ? g.lineTo(X(x), Y(shape(p, x) * cw)) : g.moveTo(X(x), Y(shape(p, x) * cw)); } g.stroke();
+  // частицы воздуха в трубе: смещение вдоль трубы
+  if (kind !== 'str') { const N = 40, ys = [cy - amp + 6, cy + amp - 6];
+    for (let i = 0; i <= N; i++) { const x = p.L * i / N, dx = shape(p, x) * cw * Math.min(len / N * 0.8, 10);
+      ys.forEach(yy => { g.fillStyle = '#64748b'; g.beginPath(); g.arc(X(x) + dx, yy, 2.5, 0, 7); g.fill(); }); } }
+  // узлы
+  const nodes = []; for (let x = kind === 'open' ? p.lam / 4 : 0; x <= p.L + 1e-9; x += p.lam / 2) nodes.push(x);   // узлы через λ/2; у открытой трубы первый — на λ/4
+  nodes.forEach(x => { g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(x), cy, 5, 0, 7); g.fill(); });
+  // λ/2
+  const lh = p.lam / 2; if (lh <= p.L + 1e-9) { const y = cy + amp + 34, a = X(0), b = X(lh);
+    g.strokeStyle = '#475569'; g.lineWidth = 1; g.beginPath(); g.moveTo(a, y - 4); g.lineTo(a, y); g.lineTo(b, y); g.lineTo(b, y - 4); g.stroke();
+    g.fillStyle = '#475569'; g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('λ/2 = ' + fmt(lh) + ' м', (a + b) / 2, y + 14); }
+  if (trav) { g.font = '11px system-ui'; g.textAlign = 'left'; g.fillStyle = '#16a34a'; g.fillText('→ бежит вправо', x0, H - 10); g.fillStyle = '#d97706'; g.fillText('← бежит влево', x0 + 110, H - 10); }
+  // показания
+  const nu1 = kind === 'str' || kind === 'open' ? p.v / (2 * p.L) : p.v / (4 * p.L);
+  $('nl').textContent = kind === 'closed' ? 'Тон n (гармоника 2n − 1)' : 'Номер гармоники n';
+  $('no').textContent = kind === 'closed' ? p.n + '-й тон → гармоника ' + p.m : String(p.n);
+  $('Lo').textContent = fmt(p.L) + ' м';
+  $('read').innerHTML = ro('частота ν', fmt(p.nu, 1) + ' Гц') + ro('основной тон ν₁', fmt(nu1, 1) + ' Гц') + ro('ν / ν₁', fmt(p.nu / nu1, 0)) +
+    ro('длина волны λ', fmt(p.lam) + ' м') + ro('узлов (красных)', nodes.length) + ro('скорость волн', p.v + ' м/с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { $('n').value = 1; $('L').value = 0.65; t = 0; draw(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; draw(); });
+$('trav').querySelectorAll('button').forEach(b => b.onclick = () => { $('trav').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); trav = +b.dataset.t; draw(); });
+['n', 'L'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

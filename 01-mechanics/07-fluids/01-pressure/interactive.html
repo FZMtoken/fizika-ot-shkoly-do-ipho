@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Две жидкости в U-трубке</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 12px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Две жидкости в U-трубке</h1>
+  <p class="lead">В U-образной трубке вода (синяя). В левое колено доливают другую жидкость, которая с водой не смешивается. Справа — график давления в каждом колене в зависимости от высоты (без атмосферного давления).</p>
+
+  <div class="card">
+    <div class="seg" id="liq"><button data-r="900" class="on">масло 900</button><button data-r="800">керосин 800</button><button data-r="710">бензин 710</button><button data-r="1000">вода 1000</button></div>
+    <div class="controls">
+      <label><i>Высота столба долитой жидкости h</i><span id="ho"></span><input id="h" type="range" min="0" max="25" step="0.5" value="20"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Налей в левое колено 20 см масла. На сколько уровень масла выше уровня воды в правом колене? Проверь формулой ρ₁h₁ = ρ₂h₂.</li>
+      <li>Замени масло на бензин, а потом на воду. Как меняется разность уровней?</li>
+      <li>Посмотри на графики давления. На какой высоте давления в коленах становятся одинаковыми и почему ниже этого уровня они совпадают?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, RW = 1000, H0 = 30;                          // начальный уровень воды, см (от дна трубки)
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let rho = 900;
+
+function calc() {
+  const h = +$('h').value, x = rho * h / (2 * RW);          // на сколько опустилась вода слева и поднялась справа, см
+  const yI = H0 - x, yL = yI + h, yR = H0 + x;               // граница раздела, верх левого столба, уровень воды справа
+  const p = (arm, y) => arm === 'L' ? (y >= yI ? rho * G * (yL - Math.min(y, yL)) / 100 : rho * G * h / 100 + RW * G * (yI - y) / 100)
+                                    : RW * G * Math.max(0, yR - y) / 100;
+  return { h, x, yI, yL, yR, p, diff: yL - yR };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = calc(), sw = Math.min(W * 0.5, 360), y0 = H - 40, k = (H - 70) / 55, tw = 34;       // k — пикселей на см
+  const xl = sw * 0.3, xr = sw * 0.7, Y = y => y0 - y * k;
+  // жидкости
+  g.fillStyle = '#93c5fd';
+  g.fillRect(xl - tw / 2, Y(S.yI), tw, S.yI * k); g.fillRect(xr - tw / 2, Y(S.yR), tw, S.yR * k); g.fillRect(xl - tw / 2, y0, xr - xl + tw, tw * 0.8);
+  const col = rho === 1000 ? '#93c5fd' : rho === 900 ? '#fcd34d' : rho === 800 ? '#fde68a' : '#fef3c7';
+  g.fillStyle = col; g.fillRect(xl - tw / 2, Y(S.yL), tw, S.h * k);
+  // трубка
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(xl - tw / 2, Y(52)); g.lineTo(xl - tw / 2, y0 + tw * 0.8); g.lineTo(xr + tw / 2, y0 + tw * 0.8); g.lineTo(xr + tw / 2, Y(52));
+  g.moveTo(xl + tw / 2, Y(52)); g.lineTo(xl + tw / 2, y0); g.lineTo(xr - tw / 2, y0); g.lineTo(xr - tw / 2, Y(52)); g.stroke();
+  // уровни
+  g.setLineDash([4, 4]); g.strokeStyle = '#6b6b70'; g.lineWidth = 1;
+  [[S.yL, xl], [S.yR, xr], [S.yI, xl]].forEach(([y]) => { g.beginPath(); g.moveTo(12, Y(y)); g.lineTo(sw - 8, Y(y)); g.stroke(); }); g.setLineDash([]);
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'left';
+  if (S.h > 0) { g.fillText('Δh = ' + fmt(S.diff) + ' см', xr + tw / 2 + 6, Y((S.yL + S.yR) / 2) + 4);
+    g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(xr + tw / 2 + 2, Y(S.yL)); g.lineTo(xr + tw / 2 + 2, Y(S.yR)); g.stroke(); }
+  // линейка
+  g.fillStyle = '#6b6b70'; g.textAlign = 'right'; for (let y = 0; y <= 50; y += 10) g.fillText(y + ' см', xl - tw / 2 - 6, Y(y) + 4);
+  // графики давления
+  const gx = sw + 50, gw = W - gx - 20;
+  if (gw > 80) {
+    const pmax = 6;                                                                // кПа
+    const X = p => gx + gw * p / pmax;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, Y(52)); g.lineTo(gx, y0); g.lineTo(gx + gw, y0); g.stroke();
+    g.fillStyle = '#6b6b70'; g.textAlign = 'center'; for (let p = 0; p <= pmax; p += 2) g.fillText(p + ' кПа', X(p), y0 + 16);
+    g.textAlign = 'left'; g.fillText('высота', gx + 4, Y(52) - 4);
+    [['L', '#d97706', 'левое колено'], ['R', '#2563eb', 'правое колено']].forEach(([arm, cl, lab], i) => {
+      g.strokeStyle = cl; g.lineWidth = arm === 'L' ? 3 : 1.5; g.setLineDash(arm === 'R' ? [6, 4] : []);
+      g.beginPath(); for (let y = 0; y <= 52; y += 0.25) { const p = S.p(arm, y) / 1000; y ? g.lineTo(X(p), Y(y)) : g.moveTo(X(p), Y(y)); } g.stroke(); g.setLineDash([]);
+      g.fillStyle = cl; g.font = '600 12px system-ui'; g.fillText(lab, gx + gw - 110, Y(48) + i * 16);
+    });
+  }
+  $('ho').textContent = fmt(S.h) + ' см';
+  $('read').innerHTML = ro('плотность жидкости', rho + ' кг/м³') + ro('уровень слева (верх)', fmt(S.yL) + ' см') + ro('уровень воды справа', fmt(S.yR) + ' см') +
+    ro('разность уровней', fmt(S.diff) + ' см') + ro('давление на границе', fmt(S.p('L', S.yI), 0) + ' Па') + ro('давление на дне', fmt(S.p('R', 0), 0) + ' Па');
+}
+
+$('liq').querySelectorAll('button').forEach(b => b.onclick = () => { $('liq').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); rho = +b.dataset.r; draw(); });
+$('h').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

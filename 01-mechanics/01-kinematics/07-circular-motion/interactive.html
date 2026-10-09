@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Движение по окружности</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off] { visibility:hidden; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .tog[data-off] { visibility:hidden; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Движение по окружности</h1>
+  <p class="lead">Скорость направлена по касательной, ускорение — к центру. В режиме качения видно, как движутся точки обода колеса относительно дороги.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="mode"><button data-m="rot" class="on">Вращение</button><button data-m="roll">Качение колеса</button></div>
+      <button class="primary" id="play">⏸ Пауза</button>
+      <button class="tog" id="dv">Показать Δv</button>
+    </div>
+    <div class="controls">
+      <label>Радиус R:<span id="Ro"></span><input id="R" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+      <label>Период T:<span id="To"></span><input id="T" type="range" min="1" max="8" step="0.5" value="4"></label>
+      <label class="slot" id="dtSlot">Промежуток Δt:<span id="dto"></span><input id="dt" type="range" min="0.05" max="1.5" step="0.05" value="0.8"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Уменьши период вдвое. Во сколько раз выросли скорость и ускорение?</li>
+      <li>Включи «Показать Δv» и уменьшай промежуток Δt. Куда всё точнее направлен вектор Δv?</li>
+      <li>Переключись на качение колеса. Какая точка обода движется быстрее всех, а какая стоит на месте?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+let mode = 'rot', showDv = false, t = 0, running = true, last = null;
+const R = () => +$('R').value, T = () => +$('T').value, w = () => 2 * Math.PI / T();
+
+function arrow(g, x1, y1, x2, y2, col, lab, w0 = 2.5) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return;
+  const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = w0;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = 'italic 600 15px serif'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 13, y2 + uy * 13 + 5); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const k = Math.min(W, H) / 5.2;                // пикселей на метр
+  const om = w(), v = om * R(), a = v * v / R();
+  $('Ro').textContent = fmt(R(), 1) + ' м'; $('To').textContent = fmt(T(), 1) + ' с'; $('dto').textContent = fmt(+$('dt').value) + ' с';
+
+  if (mode === 'rot') {
+    const cx = W / 2, cy = H / 2, Rp = R() * k, ph = om * t;
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, Rp, 0, 7); g.stroke();
+    g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, cy, 3, 0, 7); g.fill();
+    const X = cx + Rp * Math.cos(ph), Y = cy - Rp * Math.sin(ph);
+    const vs = 26, as = 26;                        // пикселей на 1 м/с и на 1 м/с²
+    g.strokeStyle = '#ccc'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, cy); g.lineTo(X, Y); g.stroke();
+    if (showDv) {
+      const dt = +$('dt').value, ph2 = ph + om * dt, X2 = cx + Rp * Math.cos(ph2), Y2 = cy - Rp * Math.sin(ph2);
+      const v1 = [-Math.sin(ph), -Math.cos(ph)], v2 = [-Math.sin(ph2), -Math.cos(ph2)];
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.arc(X2, Y2, 5, 0, 7); g.fill();
+      arrow(g, X2, Y2, X2 + v2[0] * v * vs, Y2 + v2[1] * v * vs, 'rgba(37,99,235,.45)', '');
+      // оба вектора скорости из одной точки справа внизу — и их разность
+      const ox = W - 110, oy = H - 110;
+      g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText('v₁, v₂ и Δv', ox, H - 12);
+      const ds = 60;                               // в треугольнике скоростей |v| = 60 пикселей
+      arrow(g, ox, oy, ox + v1[0] * ds, oy + v1[1] * ds, '#2563eb', 'v₁', 2);
+      arrow(g, ox, oy, ox + v2[0] * ds, oy + v2[1] * ds, 'rgba(37,99,235,.55)', 'v₂', 2);
+      arrow(g, ox + v1[0] * ds, oy + v1[1] * ds, ox + v2[0] * ds, oy + v2[1] * ds, '#9333ea', '', 2);
+      g.fillStyle = '#9333ea'; g.font = 'italic 600 15px serif'; g.fillText('Δv', ox + (v1[0] + v2[0]) * ds / 2 - 22, oy + (v1[1] + v2[1]) * ds / 2);
+    }
+    arrow(g, X, Y, X - Math.sin(ph) * v * vs, Y - Math.cos(ph) * v * vs, '#2563eb', 'v');
+    arrow(g, X, Y, X - Math.cos(ph) * a * as, Y + Math.sin(ph) * a * as, '#dc2626', 'a');
+    g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(X, Y, 7, 0, 7); g.fill();
+    $('read').innerHTML = ro('период T', fmt(T(), 1) + ' с') + ro('частота ν', fmt(1 / T(), 3) + ' Гц') + ro('угловая скорость ω', fmt(om) + ' рад/с') +
+      ro('скорость v = ωR', fmt(v) + ' м/с') + ro('ускорение a = v²/R', fmt(a) + ' м/с²');
+  } else {
+    // качение: ось движется вправо со скоростью v, колесо вращается по часовой стрелке
+    const Rp = R() * k, gy = H - 40, span = W / k, x0 = ((v * t) % (span + 2 * R())) - R();
+    const cx = x0 * k, cy = gy - Rp, ph = om * t;     // по часовой стрелке: верх → право → низ
+    g.fillStyle = '#d9d6cc'; g.fillRect(0, gy, W, H - gy);
+    // след точки обода — циклоида (для текущего круга)
+    g.strokeStyle = '#f59e0b'; g.lineWidth = 2; g.beginPath();
+    const tStart = t - (x0 + R()) / v;
+    for (let i = 0; i <= 200; i++) { const tt = tStart + (t - tStart) * i / 200, xx = (x0 - v * (t - tt)) * k, p = om * tt;
+      const px = xx + Rp * Math.sin(p), py = cy - Rp * Math.cos(p); i ? g.lineTo(px, py) : g.moveTo(px, py); }
+    g.stroke();
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, Rp, 0, 7); g.stroke();
+    for (let s = 0; s < 6; s++) { const p = ph + s * Math.PI / 3; g.strokeStyle = '#bbb'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Rp * Math.sin(p), cy - Rp * Math.cos(p)); g.stroke(); }
+    const mx = cx + Rp * Math.sin(ph), my = cy - Rp * Math.cos(ph);
+    g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(mx, my, 6, 0, 7); g.fill();
+    const vs = 22;
+    // скорости точек обода относительно дороги: v_оси + ω × r
+    const pts = [[0, -1, 'верх'], [1, 0, ''], [0, 1, 'низ'], [-1, 0, '']];
+    for (const [dx, dy] of pts) {
+      const px = cx + dx * Rp, py = cy + dy * Rp;
+      // скорость точки относительно дороги (экранные координаты, y вниз): v·(1 − dy, dx)
+      arrow(g, px, py, px + v * (1 - dy) * vs, py + v * dx * vs, '#2563eb', '');
+      g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(px, py, 4, 0, 7); g.fill();
+    }
+    arrow(g, cx, cy, cx + v * vs, cy, '#16a34a', 'v');
+    $('read').innerHTML = ro('скорость оси v', fmt(v) + ' м/с') + ro('угловая скорость ω', fmt(om) + ' рад/с') +
+      ro('верхняя точка', fmt(2 * v) + ' м/с') + ro('нижняя точка', '0 м/с') + ro('боковые точки', fmt(v * Math.SQRT2) + ' м/с');
+  }
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) t += (ts - last) / 1000;
+  last = ts; draw(); requestAnimationFrame(tick);
+}
+$('play').onclick = () => { running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('dv').onclick = () => { showDv = !showDv; $('dv').classList.toggle('on', showDv); draw(); };
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m;
+  $('dtSlot').toggleAttribute('data-off', mode !== 'rot'); $('dv').toggleAttribute('data-off', mode !== 'rot'); t = 0; draw();
+});
+['R', 'T', 'dt'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

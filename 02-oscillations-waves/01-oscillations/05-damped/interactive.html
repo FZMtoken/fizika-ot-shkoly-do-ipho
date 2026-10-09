@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Затухающие колебания</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Затухающие колебания</h1>
+  <p class="lead">Брусок на пружине теряет энергию из-за трения. Синяя линия — смещение, пунктир — огибающая амплитуды: экспонента при вязком трении, прямые при сухом.</p>
+
+  <div class="card">
+    <div class="seg" id="kind"><button data-k="visc" class="on">Вязкое трение</button><button data-k="dry">Сухое трение</button></div>
+    <div class="controls">
+      <label><i>Масса m</i><span id="mo"></span><input id="m" type="range" min="0.2" max="2" step="0.1" value="0.5"></label>
+      <label><i>Жёсткость k</i><span id="ko"></span><input id="k" type="range" min="10" max="100" step="5" value="50"></label>
+      <label><i id="fl">Сопротивление b</i><span id="fo"></span><input id="f" type="range" min="0" max="100" step="1" value="3"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>При вязком трении найди по графику, за сколько колебаний амплитуда падает вдвое. Повтори для второй половины графика.</li>
+      <li>Увеличивай сопротивление, пока колебания не исчезнут. Сравни это значение с 2√(km).</li>
+      <li>При сухом трении посчитай полуколебания до остановки и сравни с прогнозом: размах уменьшается на 2μmg/k каждые полпериода.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const G = 10, A0 = 0.1, SPAN = 10;                      // начальное смещение 10 см, окно графика 10 с
+const IDS = ['m', 'k', 'f'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let kind = 'visc', t = 0, x = A0, v = 0, stuck = false, hist = [], running = true, last = null;
+
+function par() { const m = +$('m').value, k = +$('k').value, s = +$('f').value;
+  return { m, k, b: s / 100 * 4 * Math.sqrt(k * m) * 0.75, mu: s / 100 * 0.5, w0: Math.sqrt(k / m) }; }   // b до 1,5 критического, μ до 0,5
+function reset() { t = 0; x = A0; v = 0; stuck = false; hist = [[0, x]]; draw(); }
+function step(dt) {
+  const p = par(), n = 40, h = dt / n;
+  for (let i = 0; i < n && t < SPAN; i++) {
+    if (kind === 'visc') { v = (v - p.k / p.m * x * h) / (1 + p.b / p.m * h); x += v * h; }            // полунеявная схема: устойчива при любом b
+    else if (!stuck) {
+      const fr = p.mu * p.m * G, fs = -p.k * x;
+      if (v === 0 && Math.abs(fs) <= fr) { stuck = true; break; }
+      const dir = v !== 0 ? Math.sign(v) : Math.sign(fs), vn = v + (fs - dir * fr) / p.m * h;
+      if (v !== 0 && Math.sign(vn) !== Math.sign(v)) v = 0; else { v = vn; x += v * h; }               // точка поворота: скорость обнуляется
+    }
+    t += h;
+  }
+  hist.push([t, x]); if (hist.length > 3000) hist.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 30, sw = W - 2 * x0, sc = sw * 0.35 / A0, eq = x0 + sw * 0.5, fy = 70;
+  // стол, стена, пружина, брусок
+  g.fillStyle = '#d9d6cc'; g.fillRect(x0 - 16, 20, 16, 70); g.fillRect(x0 - 16, fy + 20, sw + 16, 8);
+  const bx = eq + x * sc, bw = 26 + p.m * 10, coils = 12;
+  g.strokeStyle = '#475569'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, fy);
+  for (let i = 1; i < coils * 2; i++) g.lineTo(x0 + (bx - bw / 2 - x0) * i / (coils * 2), fy + (i % 2 ? -9 : 9));
+  g.lineTo(bx - bw / 2, fy); g.stroke();
+  g.fillStyle = stuck ? '#9ca3af' : '#2563eb'; g.fillRect(bx - bw / 2, fy + 20 - bw * 0.8, bw, bw * 0.8);
+  g.strokeStyle = '#9ca3af'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  [[-A0, '−10 см'], [0, '0'], [A0, '10 см']].forEach(([q, l]) => { const xx = eq + q * sc; g.beginPath(); g.moveTo(xx, fy + 30); g.lineTo(xx, fy + 36); g.stroke(); g.fillText(l, xx, fy + 48); });
+  if (kind === 'dry') { const a = p.mu * p.m * G / p.k; g.fillStyle = 'rgba(220,38,38,.15)'; g.fillRect(eq - a * sc, fy + 21, 2 * a * sc, 6); }   // зона застоя |x| ≤ μmg/k
+  // график x(t) и огибающая
+  const gy = 140, gh = H - gy - 14, X = q => x0 + sw * q / SPAN, Y = q => gy + gh / 2 - q / A0 * (gh / 2 - 6);
+  g.strokeStyle = '#e5e7eb'; g.beginPath(); g.moveTo(x0, gy + gh / 2); g.lineTo(x0 + sw, gy + gh / 2); g.stroke();
+  for (let s = 1; s < SPAN; s++) { g.beginPath(); g.moveTo(X(s), gy + gh / 2 - 3); g.lineTo(X(s), gy + gh / 2 + 3); g.stroke(); }
+  g.setLineDash([5, 4]); g.strokeStyle = '#d97706'; g.lineWidth = 1.5;
+  const env = q => kind === 'visc' ? A0 * Math.exp(-p.b / (2 * p.m) * q) : Math.max(0, A0 - 2 * p.mu * p.m * G / p.k * p.w0 / Math.PI * q);
+  [1, -1].forEach(sg => { g.beginPath(); for (let j = 0; j <= 200; j++) { const q = SPAN * j / 200; j ? g.lineTo(X(q), Y(sg * env(q))) : g.moveTo(X(q), Y(sg * env(q))); } g.stroke(); });
+  g.setLineDash([]); g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath(); hist.forEach(([q, v], i) => i ? g.lineTo(X(q), Y(v)) : g.moveTo(X(q), Y(v))); g.stroke();
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText('x(t), окно 10 с, деления — 1 с', x0 + 4, gy + 10);
+  // показания
+  const beta = p.b / (2 * p.m), crit = 2 * Math.sqrt(p.k * p.m);
+  $('mo').textContent = fmt(p.m, 1) + ' кг'; $('ko').textContent = p.k + ' Н/м';
+  $('fl').textContent = kind === 'visc' ? 'Сопротивление b' : 'Коэффициент трения μ';
+  $('fo').textContent = kind === 'visc' ? fmt(p.b, 2) + ' кг/с' : fmt(p.mu, 3);
+  const base = ro('ω₀ = √(k/m)', fmt(p.w0) + ' рад/с') + ro('период T₀', fmt(2 * Math.PI / p.w0) + ' с');
+  $('read').innerHTML = kind === 'visc'
+    ? base + ro('β = b/2m', fmt(beta, 3) + ' 1/с') + ro('добротность Q', beta > 0 ? (beta < p.w0 ? fmt(p.w0 / (2 * beta), 1) : 'колебаний нет') : '∞') + ro('критическое b', fmt(crit) + ' кг/с') + ro('время t', fmt(t, 1) + ' с')
+    : base + ro('зона застоя μmg/k', fmt(p.mu * p.m * G / p.k * 100, 2) + ' см') + ro('убыль за полупериод', fmt(2 * p.mu * p.m * G / p.k * 100, 2) + ' см') + ro('состояние', stuck ? 'остановился' : 'движется') + ro('время t', fmt(t, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; if (t < SPAN) step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); reset(); };
+$('kind').querySelectorAll('button').forEach(b => b.onclick = () => { $('kind').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); kind = b.dataset.k; reset(); });
+IDS.forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+reset(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расширение в пустоту</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Расширение в пустоту</h1>
+  <p class="lead">Сначала все молекулы в левой половине сосуда, справа — пустота. «Пуск» убирает перегородку. Справа — доля молекул в левой половине от времени. Энтропия по Больцману S = k·ln W, где W — число способов выбрать, какие именно молекулы находятся слева.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Число молекул N</i><span id="No"></span><input id="N" type="range" min="0" max="6" step="1" value="2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Запусти расширение при 20 молекулах. Возвращается ли газ в левую половину?</li>
+      <li>Сравни колебания доли слева при 20 и при 400 молекулах. Где они меньше?</li>
+      <li>Возьми 4 молекулы. Как часто все они случайно оказываются слева? Сравни с вероятностью (1/2)⁴ = 1/16.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const NS = [4, 10, 20, 50, 100, 200, 400], SPAN = 30;           // окно графика 30 с
+let t = 0, running = false, last = null, mol = [], hist = [], returns = 0, wasAll = true, seed = 11;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const lnF = n => { let s = 0; for (let i = 2; i <= n; i++) s += Math.log(i); return s; };
+const lnC = (n, k) => lnF(n) - lnF(k) - lnF(n - k);
+
+function init() {
+  seed = 11; t = 0; hist = [[0, 1]]; returns = 0; wasAll = true;
+  const N = NS[+$('N').value]; mol = [];
+  for (let i = 0; i < N; i++) { const a = rnd() * 2 * Math.PI, v = 0.25 + 0.2 * rnd(); mol.push({ x: rnd() * 0.5, y: rnd(), vx: v * Math.cos(a), vy: v * Math.sin(a) }); }
+}
+const nLeft = () => mol.reduce((s, m) => s + (m.x < 0.5), 0);
+function step(dt) {
+  for (const m of mol) { m.x += m.vx * dt; m.y += m.vy * dt;
+    if (m.x < 0 && m.vx < 0 || m.x > 1 && m.vx > 0) m.vx = -m.vx;
+    if (m.y < 0 && m.vy < 0 || m.y > 1 && m.vy > 0) m.vy = -m.vy; }
+  t += dt; const nl = nLeft(), all = nl === mol.length;
+  if (all && !wasAll) returns++; wasAll = all;
+  hist.push([t, nl / mol.length]); while (hist.length && hist[0][0] < t - SPAN) hist.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const N = mol.length, nl = nLeft(), bs = Math.min(W * 0.42, H - 30), bx = 12, by = (H - bs) / 2;
+  g.fillStyle = '#eff6ff'; g.fillRect(bx, by, bs / 2, bs); g.fillStyle = '#fafafa'; g.fillRect(bx + bs / 2, by, bs / 2, bs);
+  g.strokeStyle = '#334155'; g.lineWidth = 2; g.strokeRect(bx, by, bs, bs);
+  g.setLineDash(t > 0 ? [4, 4] : []); g.lineWidth = t > 0 ? 1 : 4; g.strokeStyle = t > 0 ? '#94a3b8' : '#334155';
+  g.beginPath(); g.moveTo(bx + bs / 2, by); g.lineTo(bx + bs / 2, by + bs); g.stroke(); g.setLineDash([]);
+  const r = N > 100 ? 2.5 : N > 20 ? 3.5 : 5;
+  g.fillStyle = '#dc2626'; for (const m of mol) { g.beginPath(); g.arc(bx + r + Math.min(1, Math.max(0, m.x)) * (bs - 2 * r), by + r + Math.min(1, Math.max(0, m.y)) * (bs - 2 * r), r, 0, 7); g.fill(); }
+  // график доли слева
+  const gx = bx + bs + 50, gw = W - gx - 12, gy = 16, gh = H - 46, X = s => gx + gw * (s - Math.max(0, t - SPAN)) / SPAN, Y = f => gy + gh - gh * f;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'right';
+  [0, 0.5, 1].forEach(f => g.fillText(fmt(f, 1), gx - 4, Y(f) + 4)); g.fillText('время', gx + gw, gy + gh + 14);
+  g.textAlign = 'left'; g.fillText('доля молекул слева', gx + 6, gy + 10);
+  g.setLineDash([4, 4]); g.strokeStyle = '#16a34a'; g.beginPath(); g.moveTo(gx, Y(0.5)); g.lineTo(gx + gw, Y(0.5)); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath(); hist.forEach(([s, f], i) => i ? g.lineTo(X(s), Y(f)) : g.moveTo(X(s), Y(f))); g.stroke();
+  $('No').textContent = N;
+  $('read').innerHTML = ro('слева / справа', nl + ' / ' + (N - nl)) + ro('доля слева', fmt(nl / N, 2)) + ro('энтропия S/k = ln W', fmt(lnC(N, nl), 1)) +
+    ro('максимум S/k', fmt(lnC(N, Math.floor(N / 2)), 1)) + ro('все снова слева', returns + ' раз за ' + fmt(t, 0) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) { if (t === 0) step(1e-6); requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; init(); draw(); };
+$('N').oninput = () => { running = false; $('play').textContent = '▶ Пуск'; init(); draw(); };
+window.onresize = draw;
+init(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

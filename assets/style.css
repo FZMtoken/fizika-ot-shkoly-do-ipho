@@ -1,0 +1,157 @@
+:root {
+  --bg: #fbfaf7; --card: #fff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e7e5df;
+  --accent: #2563eb; --accent-soft: #eaf1fe;
+  --A: #16a34a; --B: #2563eb; --C: #7c3aed; --D: #ea580c; --E: #dc2626;
+  --radius: 12px;
+}
+* { box-sizing: border-box; }
+html { scrollbar-gutter: stable; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.7 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Шапка */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px; background: rgba(251,250,247,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; color: var(--ink); font-size: 16px; }
+.menu-btn { display: none; margin-left: auto; font: inherit; font-size: 14px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; }
+
+/* Сетка */
+.layout { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; }
+.layout.with-side { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 40px; }
+main { min-width: 0; max-width: 780px; }
+.side { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 80px); overflow: auto; font-size: 14px; line-height: 1.45; padding-right: 8px; }
+.side-sec { font-weight: 700; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
+.side-ch summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.side-ch ol { margin: 4px 0 8px; padding-left: 22px; }
+.side-ch li { margin: 5px 0; }
+.side-ch li.current a { color: var(--ink); font-weight: 700; }
+.side-ch li.soon, .soon { color: #a3a3a8; }
+
+/* Заголовки и текст урока */
+h1 { font-size: 2rem; line-height: 1.2; margin: .2em 0 .4em; }
+h2 { font-size: 1.45rem; margin: 2em 0 .5em; line-height: 1.3; }
+h3 { font-size: 1.15rem; margin: 1.5em 0 .4em; }
+.crumbs { font-size: 14px; color: var(--muted); }
+.crumbs a { color: var(--muted); }
+.meta-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.grade { font-size: 13px; background: #f0efe9; border-radius: 99px; padding: 2px 10px; }
+.prereq { font-size: 15px; color: var(--muted); }
+.lesson blockquote { margin: 1.2em 0; padding: 12px 18px; background: var(--accent-soft); border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; }
+.lesson blockquote p { margin: 0; }
+.lesson table, .problem table { border-collapse: collapse; margin: 1em 0; font-size: 15px; display: block; overflow-x: auto; max-width: 100%; }
+.lesson th, .lesson td, .problem th, .problem td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; text-align: left; }
+.lesson th, .problem th { background: #f4f3ee; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+code { background: #f0efe9; padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+.tex-error { color: var(--E); }
+
+/* Интерактив */
+.interactive { margin: 1em 0 1.5em; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #f7f7f4; }
+.interactive iframe { display: block; width: 100%; height: 700px; border: 0; }
+.interactive .fullscreen { display: block; text-align: right; font-size: 14px; padding: 6px 14px; border-top: 1px solid var(--line); background: #fff; }
+
+/* Бейджи и уровни */
+.badge { font-size: 12px; border-radius: 99px; padding: 2px 9px; white-space: nowrap; }
+.badge.draft { background: #fff4d6; color: #8a5a00; }
+.badge.paid { background: #f1eafe; color: var(--C); }
+.badge.worked { background: #e7f6ec; color: var(--A); }
+.lvl { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: #fff; font-weight: 700; font-size: 14px; flex: none; }
+.lvl-A { background: var(--A); } .lvl-B { background: var(--B); } .lvl-C { background: var(--C); }
+.lvl-D { background: var(--D); } .lvl-E { background: var(--E); }
+
+/* Фильтры */
+.filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 20px; }
+.filter button { font: inherit; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 99px; background: #fff; cursor: pointer; }
+.filter button .lvl { width: 20px; height: 20px; font-size: 12px; border-radius: 5px; }
+.filter button.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.filter-label { font-size: 14px; color: var(--muted); }
+
+/* Карточка задачи */
+.problem { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; scroll-margin-top: 70px; }
+.problem[hidden] { display: none; }
+.p-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.p-head h3 { margin: 0; font-size: 1.1rem; flex: 1 1 200px; }
+.p-cond { margin-top: 8px; }
+.p-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 4px; padding: 10px 12px; background: #f7f7f4; border-radius: 8px; font-size: 15px; }
+.p-check input { font: inherit; width: 9em; padding: 4px 8px; border: 1px solid #ccc; border-radius: 6px; margin-left: 4px; }
+.p-check button, .step-btns button { font: inherit; font-size: 14px; padding: 5px 14px; border-radius: 8px; border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
+.step-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.step-btns button { background: #fff; color: var(--ink); border-color: #ccc; }
+.step-btns button[hidden] { display: none; }
+.verdict { font-weight: 600; min-width: 10em; }
+.verdict.ok { color: var(--A); } .verdict.no { color: var(--E); }
+.step { margin-top: 12px; padding: 10px 14px; border-radius: 8px; }
+.step h4 { margin: 0 0 4px; font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.step p:first-of-type { margin-top: 0; }
+.step p:last-child { margin-bottom: 0; }
+.hint { background: #fffbea; border-left: 3px solid #e0b100; }
+.solution { background: #f3f7ff; border-left: 3px solid var(--accent); }
+.final { margin-top: 10px; }
+.coach { margin-top: 10px; padding: 8px 12px; background: #fff; border-radius: 6px; font-size: 15px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.tags span { font-size: 12px; color: var(--muted); background: #f4f3ee; border-radius: 99px; padding: 1px 9px; }
+
+/* Навигация внизу */
+.pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 15px; }
+.pager a { max-width: 48%; }
+.pager .next { text-align: right; margin-left: auto; }
+
+/* Главная */
+.hero { padding: 24px 0 8px; }
+.hero h1 { font-size: 2.4rem; }
+.hero p { font-size: 1.15rem; color: var(--muted); max-width: 40em; }
+.legend { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 8px; }
+.dot.ready { background: var(--A); } .dot.soon { background: #cfcfd4; }
+.sec { margin-top: 28px; }
+.sec h2 { margin: 0 0 8px; }
+.chap { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 18px; margin: 10px 0; }
+.chap h3 { margin: 0 0 6px; }
+.topics { margin: 0; padding-left: 22px; }
+.topics li { padding: 4px 0; border-top: 1px dashed var(--line); }
+.topics li:first-child { border-top: 0; }
+.topics li::marker { color: var(--muted); }
+.topics li.ready::marker { color: var(--A); font-weight: 700; }
+.topics li.soon span:first-child { color: #9a9aa0; }
+.topics .g { float: right; font-size: 13px; color: var(--muted); margin-left: 12px; }
+.topics li[hidden], .chap[hidden], .sec[hidden] { display: none; }
+
+@media (max-width: 900px) {
+  .layout.with-side { grid-template-columns: minmax(0, 1fr); }
+  .menu-btn { display: inline-block; }
+  .side { display: none; position: static; max-height: none; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  body.side-open .side { display: block; }
+  h1 { font-size: 1.6rem; }
+  .hero h1 { font-size: 1.9rem; }
+}
+
+/* Несколько полей ответа */
+.p-check { flex-direction: column; align-items: stretch; }
+.p-check .field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.p-check .f-label { display: inline-block; min-width: 7em; }
+.p-check .mark { font-weight: 700; min-width: 1.2em; }
+.p-check .mark.ok { color: var(--A); } .p-check .mark.no { color: var(--E); }
+.check-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* Задача-история */
+.badge.story { background: #e8f0ff; color: var(--accent); }
+.story-problem .intro { margin-bottom: 4px; }
+.parts { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: part; }
+.part { position: relative; margin: 12px 0 0; padding: 12px 14px 12px 18px; border-left: 3px solid var(--line); background: #fcfcfa; border-radius: 0 8px 8px 0; }
+.part[hidden] { display: none; }
+.part-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.part-n { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.part-head .lvl { width: 22px; height: 22px; font-size: 12px; border-radius: 6px; }
+.unlock-note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.unlock-note[hidden] { display: none; }
+.story-nav { margin-top: 12px; }
+.story-nav button { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 8px; border: 1px dashed #bbb; background: #fff; color: var(--muted); cursor: pointer; }
+.story-nav button[hidden] { display: none; }
+.lvl.range { width: auto; padding: 0 7px; background: linear-gradient(90deg, var(--A), var(--C)); }
+/* Разобранные задачи: открытые примеры с полным решением */
+.examples { margin: 28px 0; }
+.ex-note { color: var(--muted); }
+.example { background: #f3f8f4; border: 1px solid #cfe6d6; border-left: 4px solid var(--A); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; scroll-margin-top: 70px; }
+.example .ex-body > p:first-child { margin-top: 6px; }
+.example .ex-body strong { color: #14532d; }

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Дифракция и преломление</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Дифракция и преломление</h1>
+  <p class="lead">Вид сверху на волны. «Щель»: плоская волна приходит сверху на стенку со щелью, за щелью поле сложено из вторичных волн Гюйгенса от точек щели. «Преломление»: волна переходит в среду с другой скоростью (нижняя часть).</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="slit" class="on">Щель</button><button data-m="refr">Преломление</button></div>
+    <div class="controls">
+      <label><i id="al">Длина волны λ</i><span id="ao"></span><input id="a" type="range" min="0" max="100" step="1" value="40"></label>
+      <label><i id="bl">Ширина щели a</i><span id="bo"></span><input id="b" type="range" min="0" max="100" step="1" value="40"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="400"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Сделай щель уже длины волны. Как волна расходится за щелью? А если щель в 5 раз шире длины волны?</li>
+      <li>Сравни пунктирные линии (первый минимум по формуле sin θ = λ/a) с тёмными направлениями на картине.</li>
+      <li>В режиме «Преломление» поставь v₂/v₁ больше 1 и увеличивай угол падения. При каком угле волна перестаёт проходить вниз?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const D = Math.PI / 180, WM = 12, CELL = 4, NU = 0.6, NS = 24;    // поле 12 м в ширину, 24 вторичных источника в щели
+const store = { slit: { a: '40', b: '40' }, refr: { a: '35', b: '70' } };
+let mode = 'slit', t = 0, running = true, last = null;
+const off = document.createElement('canvas');
+
+function par() { const A = +$('a').value / 100, B = +$('b').value / 100;
+  return mode === 'slit' ? { lam: 0.3 + 1.2 * A, w: 0.2 + 5.8 * B } : { al: 80 * A * D, r: 0.4 + 2.1 * B }; }   // r = v₂/v₁
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), sc = W / WM, ph = 2 * Math.PI * NU * t, nx = Math.ceil(W / CELL), ny = Math.ceil(H / CELL);
+  off.width = nx; off.height = ny; const o = off.getContext('2d'), img = o.createImageData(nx, ny), Dd = img.data;
+  let field;
+  if (mode === 'slit') {
+    const k = 2 * Math.PI / p.lam, yb = 90 / sc, cx = WM / 2, src = [];
+    for (let i = 0; i < NS; i++) src.push(cx - p.w / 2 + p.w * (i + 0.5) / NS);
+    field = (x, y) => { if (y < yb) return Math.cos(ph - k * y) * 0.8;
+      let s = 0; for (const xs of src) { const r = Math.hypot(x - xs, y - yb) + 0.02; s += Math.cos(ph - k * yb - k * r) / Math.sqrt(r); }   // огибающая вторичных волн
+      return s / NS * Math.sqrt(Math.max(p.w, p.lam)) * 1.3; };
+  } else {
+    const k1 = 2 * Math.PI / 1.0, k2 = k1 / p.r, yb = H / 2 / sc, sb = Math.sin(p.al) * p.r, tot = sb >= 1, be = tot ? 0 : Math.asin(sb);
+    field = (x, y) => { const u = Math.sin(p.al) * x;
+      if (y < yb) { let s = Math.cos(ph - k1 * (u + Math.cos(p.al) * (y - yb))); if (tot) s += Math.cos(ph - k1 * (u - Math.cos(p.al) * (y - yb))); return s * 0.7; }
+      return tot ? 0 : Math.cos(ph - k1 * u - k2 * Math.cos(be) * (y - yb)) * 0.7; };
+  }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const v = Math.max(-1, Math.min(1, field((i + 0.5) * CELL / sc, (j + 0.5) * CELL / sc))), n = 4 * (j * nx + i);
+    Dd[n] = 120 + 100 * v; Dd[n + 1] = 160 + 80 * v; Dd[n + 2] = 205 + 50 * v; Dd[n + 3] = 255;
+  }
+  o.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(off, 0, 0, nx * CELL, ny * CELL);
+  g.font = '11px system-ui'; let rd;
+  if (mode === 'slit') {
+    const yb = 90, x1 = W / 2 - p.w / 2 * sc, x2 = W / 2 + p.w / 2 * sc;
+    g.fillStyle = '#334155'; g.fillRect(0, yb - 4, x1, 8); g.fillRect(x2, yb - 4, W - x2, 8);
+    const s = p.lam / p.w;
+    if (s < 1) { const th = Math.asin(s), L = H; g.setLineDash([5, 4]); g.strokeStyle = '#dc2626'; g.lineWidth = 1.5;
+      [1, -1].forEach(sg => { g.beginPath(); g.moveTo(W / 2, yb); g.lineTo(W / 2 + sg * L * Math.tan(th), yb + L); g.stroke(); }); g.setLineDash([]); }
+    $('al').textContent = 'Длина волны λ'; $('bl').textContent = 'Ширина щели a';
+    $('ao').textContent = fmt(p.lam) + ' м'; $('bo').textContent = fmt(p.w) + ' м';
+    rd = ro('λ / a', fmt(s)) + ro('ширина щели', fmt(1 / s, 1) + ' λ') + ro('первый минимум θ', s < 1 ? fmt(Math.asin(s) / D, 1) + '°' : 'нет: a < λ') + ro('режим', s > 0.8 ? 'расходится во все стороны' : s < 0.2 ? 'почти прямой пучок' : 'заметная дифракция');
+  } else {
+    const yb = H / 2, sb = Math.sin(p.al) * p.r;
+    g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(0, yb, W, H - yb); g.strokeStyle = '#334155'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, yb); g.lineTo(W, yb); g.stroke();
+    const cx = W / 2, L = Math.min(150, H / 2 - 20);                                       // лучи: падающий и преломлённый
+    g.setLineDash([4, 4]); g.strokeStyle = '#64748b'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, yb - L); g.lineTo(cx, yb + L); g.stroke(); g.setLineDash([]);
+    const arrow = (x1, y1, x2, y2, col) => { g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      const a = Math.atan2(y2 - y1, x2 - x1); g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - 10 * Math.cos(a - 0.4), y2 - 10 * Math.sin(a - 0.4)); g.lineTo(x2 - 10 * Math.cos(a + 0.4), y2 - 10 * Math.sin(a + 0.4)); g.fill(); };
+    arrow(cx - L * Math.sin(p.al), yb - L * Math.cos(p.al), cx, yb, '#1d1d1f');
+    if (sb < 1) { const be = Math.asin(sb); arrow(cx, yb, cx + L * Math.sin(be), yb + L * Math.cos(be), '#dc2626'); }
+    else arrow(cx, yb, cx + L * Math.sin(p.al), yb - L * Math.cos(p.al), '#dc2626');
+    g.fillStyle = '#1d1d1f'; g.textAlign = 'left'; g.fillText('среда 1, v₁', 8, 16); g.fillText('среда 2, v₂', 8, yb + 16);
+    $('al').textContent = 'Угол падения α'; $('bl').textContent = 'Отношение скоростей v₂/v₁';
+    $('ao').textContent = fmt(p.al / D, 0) + '°'; $('bo').textContent = fmt(p.r);
+    rd = ro('sin β = sin α · v₂/v₁', fmt(sb, 3)) + ro('угол преломления β', sb < 1 ? fmt(Math.asin(sb) / D, 1) + '°' : 'полное отражение') +
+      ro('критический угол', p.r > 1 ? fmt(Math.asin(1 / p.r) / D, 1) + '°' : 'нет: v₂ < v₁') + ro('λ₂ / λ₁', fmt(p.r));
+  }
+  $('read').innerHTML = rd;
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { store.slit = { a: '40', b: '40' }; store.refr = { a: '35', b: '70' }; $('a').value = store[mode].a; $('b').value = store[mode].b; t = 0; draw(); };
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { store[mode] = { a: $('a').value, b: $('b').value };
+  $('mode').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); mode = b.dataset.m; $('a').value = store[mode].a; $('b').value = store[mode].b; draw(); });
+['a', 'b'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

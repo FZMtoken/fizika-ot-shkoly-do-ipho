@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Скамья Жуковского</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Скамья Жуковского</h1>
+  <p class="lead">Вид сверху: человек на скамье без трения держит две гантели. Момент инерции человека со скамьёй 1,2 кг·м². Двигай гантели к оси и от неё — момент импульса сохраняется.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Гантели от оси r</i><span id="ro"></span><input id="r" type="range" min="0.15" max="0.8" step="0.01" value="0.8"></label>
+      <label><i>Масса каждой гантели m</i><span id="mo"></span><input id="m" type="range" min="0.5" max="5" step="0.5" value="2"></label>
+      <label><i>Начальная ω (при r = 0,8 м)</i><span id="w0o"></span><input id="w0" type="range" min="0.5" max="4" step="0.5" value="2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Медленно прижми гантели к оси (r = 0,2 м). Во сколько раз выросла угловая скорость? Сравни с отношением моментов инерции.</li>
+      <li>Следи за моментом импульса и энергией. Что сохраняется, а что меняется? Откуда берётся энергия?</li>
+      <li>Сделай гантели тяжёлыми (5 кг) и повтори. Как изменился эффект?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const I0 = 1.2, R0 = 0.8;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['r', 'm', 'w0'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let phi = 0, running = true, last = null;
+
+function calc() {
+  const r = +$('r').value, m = +$('m').value, w0 = +$('w0').value;
+  const I1 = I0 + 2 * m * R0 * R0, L = I1 * w0, I = I0 + 2 * m * r * r, w = L / I;
+  return { r, m, w0, I1, L, I, w, E: L * L / (2 * I), E1: L * L / (2 * I1), F: m * w * w * r };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = calc(), sw = Math.min(W * 0.55, 400), cx = sw / 2, cy = H / 2, k = Math.min(sw, H) / 2 / 0.95;
+  g.fillStyle = '#e7d6ae'; g.beginPath(); g.arc(cx, cy, 0.35 * k, 0, 7); g.fill();               // скамья
+  g.strokeStyle = '#c8a96a'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + 0.35 * k * Math.cos(phi + 0.8), cy + 0.35 * k * Math.sin(phi + 0.8)); g.stroke();
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.arc(cx, cy, S.r * k, 0, 7); g.stroke(); g.setLineDash([]);
+  const ux = Math.cos(phi), uy = Math.sin(phi);
+  g.strokeStyle = '#f2b68a'; g.lineWidth = 8; g.lineCap = 'round';                                // руки
+  g.beginPath(); g.moveTo(cx - ux * S.r * k, cy - uy * S.r * k); g.lineTo(cx + ux * S.r * k, cy + uy * S.r * k); g.stroke(); g.lineCap = 'butt';
+  g.fillStyle = '#2563eb'; g.beginPath(); g.ellipse(cx, cy, 0.17 * k, 0.11 * k, phi, 0, 7); g.fill();     // плечи
+  g.fillStyle = '#f2b68a'; g.beginPath(); g.arc(cx, cy, 0.08 * k, 0, 7); g.fill();                         // голова
+  [-1, 1].forEach(s => { g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx + s * ux * S.r * k, cy + s * uy * S.r * k, 6 + S.m * 2, 0, 7); g.fill(); });
+  // столбики L и E
+  const bx = sw + 30, bw = W - bx - 20;
+  if (bw > 60) {
+    const Lmax = (I0 + 2 * 5 * R0 * R0) * 4, Emax = Lmax * Lmax / (2 * (I0 + 2 * 0.5 * 0.15 * 0.15));
+    const bar = (y, lab, val, max, col, txt) => { g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.textAlign = 'left'; g.fillText(lab, bx, y - 6);
+      g.fillStyle = '#f1f1ec'; g.fillRect(bx, y, bw, 18); g.fillStyle = col; g.fillRect(bx, y, bw * Math.min(1, val / max), 18);
+      g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText(txt, bx + 6, y + 13); };
+    g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillText('Что сохраняется', bx, 30);
+    bar(66, 'момент импульса L = Iω', S.L, S.L * 1.5, '#93c5fd', fmt(S.L) + ' кг·м²/с');
+    bar(114, 'момент инерции I', S.I, S.I1 * 1.2, '#d6c9a8', fmt(S.I) + ' кг·м²');
+    bar(162, 'угловая скорость ω', S.w, S.w0 * 6, '#86efac', fmt(S.w) + ' рад/с');
+    bar(210, 'энергия E = L²/(2I)', S.E, S.E1 * 6, '#fca5a5', fmt(S.E, 1) + ' Дж');
+    g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.fillText('работа рук: ' + fmt(S.E - S.E1, 1) + ' Дж', bx, 256);
+  }
+  $('ro').textContent = fmt(S.r) + ' м'; $('mo').textContent = fmt(S.m, 1) + ' кг'; $('w0o').textContent = fmt(S.w0, 1) + ' рад/с';
+  $('read').innerHTML = ro('момент инерции I', fmt(S.I) + ' кг·м²') + ro('угловая скорость ω', fmt(S.w) + ' рад/с') + ro('момент импульса L', fmt(S.L) + ' кг·м²/с') +
+    ro('энергия', fmt(S.E, 1) + ' Дж') + ro('ω / ω₀', fmt(S.w / S.w0)) + ro('I₀ / I', fmt(S.I1 / S.I)) + ro('сила на гантель', fmt(S.F, 1) + ' Н');
+}
+
+function tick(ts) {
+  if (!running) { last = null; return; }
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  phi += calc().w * dt * 0.5; draw(); requestAnimationFrame(tick);              // на экране вдвое медленнее
+}
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); draw(); };
+IDS.forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

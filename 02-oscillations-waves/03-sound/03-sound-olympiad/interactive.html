@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Источник пролетает мимо</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Источник пролетает мимо</h1>
+  <p class="lead">Источник частотой 500 Гц летит по прямой мимо наблюдателя на расстоянии d. Сверху — вид сверху (движение замедлено), снизу — частота, которую слышит наблюдатель, по его часам. Время t = 0 — момент, когда источник ближе всего к наблюдателю.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Скорость источника u / v</i><span id="Mo"></span><input id="M" type="range" min="0.05" max="0.8" step="0.05" value="0.3"></label>
+      <label><i>Расстояние до траектории d</i><span id="do"></span><input id="d" type="range" min="5" max="100" step="5" value="30"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сначала</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>В какой момент по часам наблюдателя слышимая частота равна 500 Гц? Сравни с d/v.</li>
+      <li>Уменьши d. Как меняется крутизна спада частоты? Почему гоночная машина, пролетая рядом, звучит «вжжжух»?</li>
+      <li>Сравни наибольшую и наименьшую частоты с формулами ν·v/(v − u) и ν·v/(v + u).</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const V = 340, NU = 500, CYC = 10;                       // цикл анимации 10 с
+let t = 0, running = true, last = null;
+
+function par() { const M = +$('M').value, d = +$('d').value, u = M * V, X = 6 * d;   // показываем участок пути ±6d
+  const T = X / u;                                                                     // время пролёта половины участка
+  return { M, d, u, X, T }; }
+const recv = (p, te) => { const x = p.u * te, r = Math.hypot(x, p.d); return { tr: te + r / V, nu: NU / (1 + p.M * x / r), x }; };   // cos α = −x/r
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 40, sw = W - 2 * x0, now = -p.T + 2 * p.T * ((t % CYC) / CYC);  // реальное время в цикле
+  // вид сверху
+  const mh = 150, sc = Math.min(sw / (2 * p.X), (mh - 40) / p.d), cx = W / 2, oy = 24 + p.d * sc + 6, py = oy - p.d * sc;
+  g.strokeStyle = '#cbd5e1'; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx - p.X * sc, py); g.lineTo(cx + p.X * sc, py); g.stroke(); g.setLineDash([]);
+  g.save(); g.beginPath(); g.rect(0, 0, W, mh + 14); g.clip();                    // фронты только в верхней панели
+  for (let k = -12; k <= 12; k++) { const te = k * p.T / 6; if (te > now) continue; const r = V * (now - te) * sc; if (r > W) continue;   // фронты, испущенные раньше
+    g.strokeStyle = 'rgba(37,99,235,.35)'; g.beginPath(); g.arc(cx + p.u * te * sc, py, r, 0, 2 * Math.PI); g.stroke(); }
+  g.restore();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(cx + p.u * now * sc, py, 6, 0, 7); g.fill();
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, oy, 6, 0, 7); g.fill(); g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('наблюдатель', cx + 10, oy + 4);
+  // график частоты по часам наблюдателя
+  const gy = mh + 30, gh = H - gy - 26, fmax = NU / (1 - p.M) * 1.03, fmin = NU / (1 + p.M) * 0.97;
+  const t0 = recv(p, -p.T).tr, t1 = recv(p, p.T).tr, Xg = q => x0 + sw * (q - t0) / (t1 - t0), Yg = f => gy + gh - gh * (f - fmin) / (fmax - fmin);
+  g.strokeStyle = '#e5e7eb'; g.strokeRect(x0, gy, sw, gh);
+  g.setLineDash([3, 3]); g.strokeStyle = '#9ca3af'; g.beginPath(); g.moveTo(x0, Yg(NU)); g.lineTo(x0 + sw, Yg(NU)); g.stroke();
+  g.beginPath(); g.moveTo(Xg(0), gy); g.lineTo(Xg(0), gy + gh); g.stroke(); g.beginPath(); g.moveTo(Xg(p.d / V), gy); g.lineTo(Xg(p.d / V), gy + gh); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+  for (let j = 0; j <= 400; j++) { const q = recv(p, -p.T + 2 * p.T * j / 400); j ? g.lineTo(Xg(q.tr), Yg(q.nu)) : g.moveTo(Xg(q.tr), Yg(q.nu)); } g.stroke();
+  let heard = null;                                                                  // какой звук слышен сейчас: решаем tr(te) = now
+  if (now >= t0) { let a = -p.T, b = p.T; for (let i = 0; i < 50; i++) { const m = (a + b) / 2; recv(p, m).tr < now ? a = m : b = m; } heard = recv(p, a); if (heard.tr <= t1) { g.fillStyle = '#dc2626'; g.beginPath(); g.arc(Xg(heard.tr), Yg(heard.nu), 5, 0, 7); g.fill(); } }
+  g.fillStyle = '#6b6b70'; g.textAlign = 'left'; g.fillText('слышимая частота по часам наблюдателя', x0 + 4, gy + 12);
+  g.textAlign = 'center'; g.fillText('t = 0', Xg(0), gy + gh + 13); g.fillText('d/v', Xg(p.d / V), gy + gh + 22);
+  g.textAlign = 'right'; g.fillText('500 Гц', x0 + sw - 4, Yg(NU) - 4);
+  // показания
+  $('Mo').textContent = fmt(p.M) + ' (' + fmt(p.u, 0) + ' м/с)'; $('do').textContent = p.d + ' м';
+  $('read').innerHTML = ro('наибольшая ν·v/(v − u)', fmt(NU / (1 - p.M), 0) + ' Гц') + ro('наименьшая ν·v/(v + u)', fmt(NU / (1 + p.M), 0) + ' Гц') +
+    ro('500 Гц слышно при t = d/v', fmt(p.d / V * 1000, 0) + ' мс') + ro('слышно сейчас', heard && heard.tr <= t1 ? fmt(heard.nu, 0) + ' Гц' : '—') + ro('время t', fmt(now, 2) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { t = 0; draw(); };
+['M', 'd'].forEach(id => $(id).oninput = () => { t = 0; draw(); });
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

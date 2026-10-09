@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Броуновское движение</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Броуновское движение</h1>
+  <p class="lead">Большая жёлтая частица плавает среди мелких молекул (синие). Молекулы хаотически движутся и толкают её с разных сторон; удары не уравновешиваются, и частица блуждает. Оранжевая линия — её след. В настоящем опыте молекулы не видны, видна только частица.</p>
+
+  <div class="card">
+    <div class="seg" id="view"><button data-v="all" class="on">Показать молекулы</button><button data-v="part">Как в микроскопе</button></div>
+    <div class="controls">
+      <label><i>Температура (скорость молекул)</i><span id="To"></span><input id="T" type="range" min="50" max="600" step="10" value="300"></label>
+      <label><i>Масса большой частицы</i><span id="mo"></span><input id="m" type="range" min="5" max="200" step="5" value="40"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сначала</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Переключись на вид «как в микроскопе». Похоже ли движение частицы на чьё-то целенаправленное плавание?</li>
+      <li>Подними температуру вдвое. Быстрее ли частица уходит от начальной точки?</li>
+      <li>Сделай частицу тяжелее. Почему её блуждания становятся медленнее, хотя молекулы бьют так же?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const N = 160, RB = 16, RS = 2.5, BW = 600, BH = 380;    // мир 600×380 условных единиц
+let t = 0, running = true, last = null, view = 'all', mol = [], big, trail = [], hits = 0, seed = 1;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;                    // повторяемый генератор
+const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+
+function vs() { return 40 * Math.sqrt(+$('T').value / 300); }                         // среднеквадратичная скорость ∝ √T
+function reset() { seed = 7; t = 0; hits = 0; big = { x: BW / 2, y: BH / 2, vx: 0, vy: 0 }; trail = [[big.x, big.y]]; mol = [];
+  for (let i = 0; i < N; i++) { let x, y; do { x = rnd() * BW; y = rnd() * BH; } while (Math.hypot(x - big.x, y - big.y) < RB + 6);
+    mol.push({ x, y, vx: gauss() * vs() / Math.SQRT2, vy: gauss() * vs() / Math.SQRT2 }); } draw(); }
+function rescale() { const v0 = vs(); let s = 0; mol.forEach(p => s += p.vx * p.vx + p.vy * p.vy); const k = v0 / Math.sqrt(s / N || 1); mol.forEach(p => { p.vx *= k; p.vy *= k; }); }
+function step(dt) {
+  const M = +$('m').value, n = 8, h = dt / n;
+  for (let s = 0; s < n; s++) {
+    for (const p of mol) { p.x += p.vx * h; p.y += p.vy * h;
+      if (p.x < 0 && p.vx < 0 || p.x > BW && p.vx > 0) p.vx = -p.vx; if (p.y < 0 && p.vy < 0 || p.y > BH && p.vy > 0) p.vy = -p.vy;
+      const dx = p.x - big.x, dy = p.y - big.y, d = Math.hypot(dx, dy);
+      if (d < RB + RS) { const nx = dx / d, ny = dy / d, rel = (p.vx - big.vx) * nx + (p.vy - big.vy) * ny;
+        if (rel < 0) { const j = 2 * rel / (1 + 1 / M);                                       // упругий удар: масса молекулы 1, частицы M
+          p.vx -= j * nx; p.vy -= j * ny; big.vx += j / M * nx; big.vy += j / M * ny; hits++; } } }
+    big.x += big.vx * h; big.y += big.vy * h;
+    if (big.x < RB && big.vx < 0 || big.x > BW - RB && big.vx > 0) big.vx = -big.vx; if (big.y < RB && big.vy < 0 || big.y > BH - RB && big.vy > 0) big.vy = -big.vy;
+    t += h;
+  }
+  trail.push([big.x, big.y]); if (trail.length > 3000) trail.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sc = Math.min(W / BW, H / BH), ox = (W - BW * sc) / 2, oy = (H - BH * sc) / 2, X = x => ox + x * sc, Y = y => oy + y * sc;
+  g.fillStyle = view === 'part' ? '#eef2f7' : '#f8fafc'; g.fillRect(X(0), Y(0), BW * sc, BH * sc); g.strokeStyle = '#cbd5e1'; g.strokeRect(X(0), Y(0), BW * sc, BH * sc);
+  if (view === 'all') { g.fillStyle = '#2563eb'; mol.forEach(p => { g.beginPath(); g.arc(X(p.x), Y(p.y), Math.max(1.5, RS * sc), 0, 7); g.fill(); }); }
+  g.strokeStyle = '#d97706'; g.lineWidth = 1.5; g.beginPath(); trail.forEach(([x, y], i) => i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y))); g.stroke();
+  g.fillStyle = '#eab308'; g.strokeStyle = '#a16207'; g.lineWidth = 1.5; g.beginPath(); g.arc(X(big.x), Y(big.y), RB * sc, 0, 7); g.fill(); g.stroke();
+  const disp = Math.hypot(big.x - BW / 2, big.y - BH / 2);
+  $('To').textContent = $('T').value + ' К'; $('mo').textContent = $('m').value + ' масс молекулы';
+  $('read').innerHTML = ro('ударов молекул', hits) + ro('скорость частицы', fmt(Math.hypot(big.vx, big.vy), 1) + ' усл. ед.') +
+    ro('скорость молекул (ср. кв.)', fmt(vs(), 1) + ' усл. ед.') + ro('смещение от старта', fmt(disp, 0) + ' усл. ед.') + ro('время', fmt(t, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+$('view').querySelectorAll('button').forEach(b => b.onclick = () => { $('view').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); view = b.dataset.v; draw(); });
+$('T').oninput = () => { rescale(); draw(); }; $('m').oninput = draw;
+window.onresize = draw;
+reset(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

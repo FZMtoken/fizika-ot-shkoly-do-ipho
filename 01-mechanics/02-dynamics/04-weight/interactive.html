@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Весы в лифте</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.warn { border-color:#dc2626; color:#dc2626; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #trip { min-width: 12em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Весы в лифте</h1>
+  <p class="lead">Человек стоит на весах в кабине лифта. Весы показывают силу давления, делённую на g, — «килограммы».
+    Зелёная стрелка — сила тяжести, синяя — сила реакции весов, красная — вес, приложенный к весам.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Масса человека m:<span id="mo"></span><input id="m" type="range" min="20" max="100" step="5" value="60"></label>
+      <label>Ускорение лифта a (+ вверх):<span id="ao"></span><input id="a" type="range" min="-10" max="10" step="0.5" value="0"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="trip">▶ Поездка вверх</button>
+      <button class="warn" id="cut">Оборвать трос</button>
+      <button id="stop">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь ускорение 2 м/с² вверх. Что показывают весы? А при 2 м/с² вниз?</li>
+      <li>Найди ускорение, при котором весы показывают ноль.</li>
+      <li>Запусти поездку и следи за весами на каждом этапе: разгон, равномерное движение, торможение.</li>
+      <li>Нажми «Оборвать трос». Исчезла ли сила тяжести?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+// программа поездки: [длительность, ускорение]
+const PROGRAM = [[1, 0], [4, 1.5], [20, 0], [3, -2], [1.5, 0]];
+let mode = 'manual', t = 0, y = 0, v = 0, last = null, running = false, phase = '';
+const A = () => +$('a').value, M = () => +$('m').value;
+
+function progAcc(tt) { let s = 0; const names = ['стоит', 'разгон вверх', 'равномерно вверх', 'торможение', 'стоит'];
+  for (let i = 0; i < PROGRAM.length; i++) { if (tt < s + PROGRAM[i][0]) { phase = names[i]; return PROGRAM[i][1]; } s += PROGRAM[i][0]; }
+  phase = 'стоит'; return null; }
+
+function arrow(g, x, y1, y2, col, lab, side) {
+  if (Math.abs(y2 - y1) < 3) return; const d = Math.sign(y2 - y1);
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y1); g.lineTo(x, y2 - d * 8); g.stroke();
+  g.beginPath(); g.moveTo(x, y2); g.lineTo(x - 6, y2 - d * 12); g.lineTo(x + 6, y2 - d * 12); g.fill();
+  g.font = '600 13px system-ui'; g.textAlign = side > 0 ? 'left' : 'right'; g.fillText(lab, x + side * 10, (y1 + y2) / 2 + 4);
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const a = A(), m = M(), N = Math.max(0, m * (G + a)), n = N / (m * G);
+  // шахта с отметками этажей, смещающимися при движении
+  const cx = W / 2, cabW = 150, cabH = 220, cabY = H / 2 - cabH / 2;
+  g.fillStyle = '#e9e6de'; g.fillRect(cx - cabW / 2 - 30, 0, cabW + 60, H);
+  g.fillStyle = '#b8b2a3'; const floorPx = 70, off = ((y * 20) % floorPx + floorPx) % floorPx;
+  for (let fy = -floorPx + off; fy < H + floorPx; fy += floorPx) { g.fillRect(cx - cabW / 2 - 30, fy, 20, 3); g.fillRect(cx + cabW / 2 + 10, fy, 20, 3); }
+  // трос
+  if (mode !== 'cut') { g.strokeStyle = '#555'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, 0); g.lineTo(cx, cabY); g.stroke(); }
+  // кабина
+  g.fillStyle = '#fff'; g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.fillRect(cx - cabW / 2, cabY, cabW, cabH); g.strokeRect(cx - cabW / 2, cabY, cabW, cabH);
+  // весы
+  const sY = cabY + cabH - 22; g.fillStyle = '#d4d4d8'; g.fillRect(cx - 40, sY, 80, 16);
+  g.fillStyle = '#1d1d1f'; g.fillRect(cx - 22, sY + 3, 44, 11); g.fillStyle = '#4ade80'; g.font = '600 10px ui-monospace, monospace'; g.textAlign = 'center';
+  g.fillText(fmt(N / G, 1) + ' кг', cx, sY + 12);
+  // человечек
+  const top = sY - 110; g.strokeStyle = '#1d1d1f'; g.lineWidth = 3;
+  g.beginPath(); g.arc(cx, top + 14, 12, 0, 7); g.stroke();
+  g.beginPath(); g.moveTo(cx, top + 26); g.lineTo(cx, top + 70); g.moveTo(cx, top + 40); g.lineTo(cx - 18, top + 60); g.moveTo(cx, top + 40); g.lineTo(cx + 18, top + 60);
+  g.moveTo(cx, top + 70); g.lineTo(cx - 14, sY); g.moveTo(cx, top + 70); g.lineTo(cx + 14, sY); g.stroke();
+  // силы: пикселей на 1 Н
+  const fs = 90 / (100 * G * 1.5);
+  arrow(g, cx - 34, top + 50, top + 50 + m * G * fs * 1.5, '#16a34a', 'mg', -1);
+  arrow(g, cx + 34, sY - 4, sY - 4 - N * fs * 1.5, '#2563eb', 'N', 1);
+  arrow(g, cx + 60, sY + 8, sY + 8 + N * fs * 1.2, '#dc2626', 'P', 1);
+  // ускорение кабины
+  if (Math.abs(a) > 0.01) { g.strokeStyle = g.fillStyle = '#9333ea'; const ax = cx + cabW / 2 + 60, al = a * 14;
+    arrow(g, ax, H / 2, H / 2 - al, '#9333ea', 'a', 1); }
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left';
+  g.fillText(mode === 'trip' ? 'Поездка: ' + phase : mode === 'cut' ? 'Трос оборван: свободное падение' : 'Ручной режим', 10, 20);
+
+  $('mo').textContent = fmt(m, 0) + ' кг'; $('ao').textContent = fmt(a, 1) + ' м/с² ' + (a > 0 ? '(вверх)' : a < 0 ? '(вниз)' : '');
+  $('read').innerHTML = ro('сила тяжести mg', fmt(m * G, 0) + ' Н') + ro('вес P = m(g + a)', fmt(N, 0) + ' Н') +
+    ro('весы показывают', fmt(N / G, 1) + ' кг') + ro('перегрузка n', fmt(n, 2)) + ro('скорость лифта', fmt(v, 1) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) {
+    const dt = Math.min(0.05, (ts - last) / 1000) * (mode === 'trip' ? 3 : 1);
+    if (mode === 'trip') { const acc = progAcc(t); if (acc === null) { running = false; $('trip').textContent = '▶ Поездка вверх'; draw(); return; } $('a').value = acc; }
+    t += dt; v += A() * dt; y += v * dt;
+    if (mode === 'cut' && t > 2.5) { running = false; draw(); return; }
+  }
+  last = ts; draw(); requestAnimationFrame(tick);
+}
+function stopAll() { running = false; mode = 'manual'; t = 0; v = 0; y = 0; $('a').value = 0; $('trip').textContent = '▶ Поездка вверх'; draw(); }
+$('trip').onclick = () => {
+  if (mode === 'trip' && running) { running = false; $('trip').textContent = '▶ Продолжить поездку'; return; }
+  if (mode !== 'trip') { stopAll(); mode = 'trip'; }
+  running = true; last = null; $('trip').textContent = '⏸ Пауза'; requestAnimationFrame(tick);
+};
+$('cut').onclick = () => { stopAll(); mode = 'cut'; $('a').value = -G; running = true; last = null; requestAnimationFrame(tick); };
+$('stop').onclick = stopAll;
+$('a').oninput = () => { if (mode !== 'manual') { running = false; mode = 'manual'; t = 0; v = 0; $('trip').textContent = '▶ Поездка вверх'; } draw(); };
+$('m').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

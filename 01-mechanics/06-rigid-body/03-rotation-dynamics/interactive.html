@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Груз на маховике</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Груз на маховике</h1>
+  <p class="lead">Маховик — сплошной диск радиусом 25 см на валу радиусом 5 см. Нить намотана на вал или на обод, к ней привязан груз. Трения нет. Серый квадрат показывает, где был бы груз при свободном падении.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="0.05" class="on">Нить на валу (5 см)</button><button data-m="0.25">Нить на ободе (25 см)</button></div>
+    <div class="controls">
+      <label><i>Масса груза m</i><span id="mo"></span><input id="m" type="range" min="0.2" max="3" step="0.1" value="1"></label>
+      <label><i>Масса маховика M</i><span id="Mo"></span><input id="M" type="range" min="0" max="10" step="0.5" value="2"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Груз 1 кг, маховик лёгкий (0 кг). С каким ускорением падает груз? Утяжеляй маховик — что происходит?</li>
+      <li>Сравни натяжение нити с весом груза. Почему оно меньше?</li>
+      <li>Перенеси нить с вала на обод. Как изменились ускорение груза и угловое ускорение маховика? Почему?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, RD = 0.25, HMAX = 1.5;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let rho = 0.05, t = 0, running = false, last = null;
+
+function calc() {
+  const m = +$('m').value, M = +$('M').value, I = M * RD * RD / 2, a = m * G / (m + I / (rho * rho));
+  const tEnd = Math.sqrt(2 * HMAX / a), tt = Math.min(t, tEnd), s = a * tt * tt / 2, v = a * tt;
+  return { m, M, I, a, T: m * (G - a), eps: a / rho, s, v, w: v / rho, tEnd, sFree: Math.min(HMAX, G * tt * tt / 2), done: t >= tEnd };
+}
+
+function arrow(g, x1, y1, x2, y2, col, lab) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + 6, y2 + (uy > 0 ? -2 : 12)); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = calc(), sw = Math.min(W * 0.55, 400), cx = sw * 0.4, cy = 80, Rp = 60, k = (H - cy - 100) / HMAX;   // k — пикселей на метр
+  const phi = S.s / rho;
+  // маховик
+  g.fillStyle = S.M > 0 ? '#cbd5e1' : '#f1f5f9'; g.strokeStyle = '#475569'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, Rp, 0, 7); g.fill(); g.stroke();
+  g.strokeStyle = '#64748b'; g.lineWidth = 1.5; for (let i = 0; i < 4; i++) { const a = phi + i * Math.PI / 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Rp * Math.cos(a), cy + Rp * Math.sin(a)); g.stroke(); }
+  const rv = Rp * 0.2; g.fillStyle = '#475569'; g.beginPath(); g.arc(cx, cy, rv, 0, 7); g.fill();
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(cx, cy, 3, 0, 7); g.fill();
+  // нить и груз
+  const rs = rho === 0.05 ? rv : Rp, sx = cx + rs, gy = cy + 30 + S.s * k, bw = 24 + S.m * 8;
+  g.strokeStyle = '#92400e'; g.lineWidth = 2; g.beginPath(); g.moveTo(sx, cy); g.lineTo(sx, gy); g.stroke();
+  // призрак свободного падения
+  g.strokeStyle = '#9ca3af'; g.setLineDash([4, 3]); g.strokeRect(sx - bw / 2 + bw + 30, cy + 30 + S.sFree * k, bw, bw * 0.8); g.setLineDash([]);
+  g.fillStyle = '#dc2626'; g.fillRect(sx - bw / 2, gy, bw, bw * 0.8);
+  g.fillStyle = '#fff'; g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillText(fmt(S.m, 1) + ' кг', sx, gy + bw * 0.45);
+  const fs = 2.2;
+  arrow(g, sx - bw / 2 - 12, gy + 2, sx - bw / 2 - 12, gy + 2 - S.T * fs, '#2563eb', 'T');
+  arrow(g, sx - bw / 2 - 12, gy + bw * 0.8, sx - bw / 2 - 12, gy + bw * 0.8 + S.m * G * fs, '#16a34a', 'mg');
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, H - 14, sw, 14);
+  // энергия: груз и маховик
+  const bx = sw + 30, bwid = W - bx - 20;
+  if (bwid > 60) {
+    const Eg = S.m * S.v * S.v / 2, Ew = S.I * S.w * S.w / 2, Etot = S.m * G * HMAX;
+    g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillText('Куда уходит mgh', bx, 30);
+    const bar = (y, lab, val, col) => { g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.fillText(lab, bx, y - 6);
+      g.fillStyle = '#f1f1ec'; g.fillRect(bx, y, bwid, 18); g.fillStyle = col; g.fillRect(bx, y, bwid * val / Etot, 18);
+      g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText(fmt(val, 1) + ' Дж', bx + 6, y + 13); };
+    bar(66, 'потеряно mgh', S.m * G * S.s, '#e5e7eb'); bar(114, 'энергия груза mv²/2', Eg, '#fca5a5'); bar(162, 'энергия маховика Iω²/2', Ew, '#93c5fd');
+    g.fillStyle = '#6b6b70'; g.font = '13px system-ui'; g.fillText('доля маховика: ' + fmt(100 * (S.I / (rho * rho)) / (S.m + S.I / (rho * rho)), 0) + ' %', bx, 210);
+  }
+  $('mo').textContent = fmt(S.m, 1) + ' кг'; $('Mo').textContent = fmt(S.M, 1) + ' кг';
+  $('read').innerHTML = ro('ускорение груза a', fmt(S.a) + ' м/с²') + ro('натяжение T', fmt(S.T) + ' Н') + ro('вес груза mg', fmt(S.m * G, 1) + ' Н') +
+    ro('угловое ускорение ε', fmt(S.eps, 1) + ' рад/с²') + ro('момент инерции I', fmt(S.I, 4) + ' кг·м²') + ro('I / ρ²', fmt(S.I / (rho * rho), 2) + ' кг') +
+    ro('скорость груза', fmt(S.v) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  t += dt; draw();
+  if (calc().done) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick);
+}
+const reset = () => { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); };
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  if (calc().done) t = 0; running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+$('reset').onclick = () => { $('m').value = 1; $('M').value = 2; rho = 0.05; $('mode').querySelectorAll('button').forEach((x, i) => x.classList.toggle('on', i === 0)); reset(); };
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); rho = +b.dataset.m; reset(); });
+['m', 'M'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Интеграл</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .tog { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  label span { font-weight:400; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .readout { font-variant-numeric:tabular-nums; margin-top:8px; }
+  .pos { color:#2563eb; font-weight:600; } .neg { color:#dc2626; font-weight:600; }
+  .task { border-left:4px solid #2563eb; }
+
+  /* Стабильная вёрстка: размеры блоков не зависят от значений, ничего не прыгает при движении ползунков и нажатии кнопок */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > *, .graphs > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; color:var(--ink); }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  td, th { white-space:nowrap; }
+  #play { min-width: 7.2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Интеграл: площадь под графиком скорости</h1>
+  <p class="lead">Перемещение — это сумма маленьких прямоугольников v·Δt. Увеличивай их число и смотри, к чему стремится сумма.</p>
+
+  <div class="card">
+    <div class="row" id="fn">
+      <button class="tog on" data-f="0">v = 2t</button>
+      <button class="tog" data-f="1">v = 6 − 2t</button>
+      <button class="tog" data-f="2">v = t²</button>
+      <button class="tog" data-f="3">v = 3 sin t</button>
+    </div>
+    <div class="controls">
+      <label>Конец промежутка t: <span id="To"></span><input id="T" type="range" min="0.5" max="6.5" step="0.05" value="3"></label>
+      <label>Число прямоугольников n: <span id="no"></span><input id="n" type="range" min="1" max="100" step="1" value="4"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Для v = 2t на промежутке от 0 до 3 с увеличивай n. К какому числу стремится сумма? Проверь по площади треугольника.</li>
+      <li>Для v = 6 − 2t поставь конец промежутка 5 с. Почему часть прямоугольников красная? Найди перемещение и путь.</li>
+      <li>Для v = 3 sin t найди конец промежутка, при котором перемещение равно нулю. Что делает тело в этот момент?</li>
+      <li>Почему при v = 2t сумма прямоугольников всегда меньше точного ответа, а при v = 6 − 2t в начале — больше?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const F = [
+  { v: t => 2 * t,            X: t => t * t,                 name: 'v = 2t' },
+  { v: t => 6 - 2 * t,        X: t => 6 * t - t * t,         name: 'v = 6 − 2t' },
+  { v: t => t * t,            X: t => t ** 3 / 3,            name: 'v = t²' },
+  { v: t => 3 * Math.sin(t),  X: t => -3 * Math.cos(t),      name: 'v = 3 sin t' },
+];
+let fi = 0;
+const fmt = (n, p = 3) => (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+
+function pathLen(f, T) {             // путь: численно, с мелким шагом
+  let s = 0, N = 4000, h = T / N;
+  for (let i = 0; i < N; i++) s += Math.abs(f.v((i + .5) * h)) * h;
+  return s;
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const f = F[fi], T = +$('T').value, n = +$('n').value, dt = T / n;
+  const T1 = 6.5;
+  let lo = 0, hi = 0;
+  for (let i = 0; i <= 200; i++) { const y = f.v(T1 * i / 200); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+  const m = (hi - lo) * .08; lo -= m; hi += m;
+  const L = 44, R = 12, Tp = 12, B = 26;
+  const sx = t => L + t / T1 * (W - L - R), sy = y => Tp + (hi - y) / (hi - lo) * (H - Tp - B);
+
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center';
+  for (let t = 0; t <= 6; t++) { g.beginPath(); g.moveTo(sx(t), Tp); g.lineTo(sx(t), H - B); g.stroke(); g.fillText(t, sx(t), H - 8); }
+  const st = (hi - lo) > 20 ? 5 : (hi - lo) > 8 ? 2 : 1;
+  g.textAlign = 'right';
+  for (let y = Math.ceil(lo / st) * st; y <= hi; y += st) { g.beginPath(); g.moveTo(L, sy(y)); g.lineTo(W - R, sy(y)); g.stroke(); g.fillText(fmt(y), L - 5, sy(y) + 4); }
+
+  // прямоугольники по левому концу
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i * dt, v = f.v(t); sum += v * dt;
+    g.fillStyle = v >= 0 ? 'rgba(37,99,235,.28)' : 'rgba(220,38,38,.28)';
+    g.strokeStyle = v >= 0 ? '#2563eb' : '#dc2626'; g.lineWidth = 1;
+    const x = sx(t), w = sx(t + dt) - x, y0 = sy(0), y1 = sy(v);
+    g.fillRect(x, Math.min(y0, y1), w, Math.abs(y1 - y0));
+    if (n <= 60) g.strokeRect(x, Math.min(y0, y1), w, Math.abs(y1 - y0));
+  }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, sy(0)); g.lineTo(W - R, sy(0)); g.stroke();
+  // граница промежутка
+  g.strokeStyle = '#1d1d1f'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(sx(T), Tp); g.lineTo(sx(T), H - B); g.stroke(); g.setLineDash([]);
+  // график
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2.5; g.beginPath();
+  for (let i = 0; i <= 400; i++) { const t = T1 * i / 400; i ? g.lineTo(sx(t), sy(f.v(t))) : g.moveTo(sx(t), sy(f.v(t))); }
+  g.stroke();
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(f.name + ', м/с', L + 8, Tp + 16);
+  g.textAlign = 'right'; g.font = '12px system-ui'; g.fillText('t, с', W - R, H - 8);
+
+  const exact = f.X(T) - f.X(0);
+  $('To').textContent = fmt(T, 1) + ' с'; $('no').textContent = n;
+  $('read').innerHTML = ro('сумма прямоугольников', fmt(sum) + ' м') + ro('точно (перемещение)', fmt(exact) + ' м') +
+    ro('ошибка', fmt(Math.abs(sum - exact)) + ' м') + ro('путь', fmt(pathLen(f, T), 2) + ' м');
+}
+
+document.querySelectorAll('#fn .tog').forEach(b => b.onclick = () => {
+  fi = +b.dataset.f; document.querySelectorAll('#fn .tog').forEach(x => x.classList.toggle('on', x === b)); draw();
+});
+['T', 'n'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

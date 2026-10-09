@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Газ в цилиндре</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Газ в цилиндре</h1>
+  <p class="lead">Молекулы газа летают в цилиндре и ударяются о поршень справа. «Давление по ударам» — средний импульс, переданный поршню за секунду на единицу его площади; модель откалибрована так, что 0,4 моль при 300 К в 10 л дают ровно столько же, сколько формула pV = νRT. Каждая точка изображает много молекул; молекул в модели мало, поэтому показание по ударам колеблется на несколько процентов — это флуктуации.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Количество газа ν</i><span id="no"></span><input id="n" type="range" min="0.1" max="0.8" step="0.1" value="0.4"></label>
+      <label><i>Температура T</i><span id="To"></span><input id="T" type="range" min="100" max="900" step="50" value="300"></label>
+      <label><i>Объём V</i><span id="Vo"></span><input id="V" type="range" min="4" max="16" step="1" value="10"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Удвой температуру. Во сколько раз выросло давление? Почему молекулы бьют поршень и чаще, и сильнее?</li>
+      <li>Удвой количество газа при прежних T и V. Сравни давление с формулой.</li>
+      <li>Уменьши объём вдвое. Что стало с давлением? Подожди несколько секунд, пока показание по ударам успокоится.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const R = 8.31, PER = 600, CH = 200, VPX = 30, WIN = 4;   // 600 точек на моль; высота цилиндра 200 ед.; 1 л = 30 ед. длины; окно усреднения 4 с
+const C2 = 40000 / 300;                                    // ⟨v²⟩ = C2·T в условных единицах
+let t = 0, running = true, last = null, mol = [], hits = [], seed = 3;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+
+const par = () => ({ nu: +$('n').value, T: +$('T').value, V: +$('V').value });
+const width = p => p.V * VPX;
+const pTheory = p => p.nu * R * p.T / (p.V * 1e-3);
+const K = pTheory({ nu: 0.4, T: 300, V: 10 }) / (0.4 * PER * C2 * 300 / (2 * 10 * VPX * CH));     // калибровка двумерной модели к pV = νRT
+
+function sync() {                                          // подогнать число частиц и их скорости под ползунки
+  const p = par(), N = Math.round(p.nu * PER), w = width(p);
+  while (mol.length < N) mol.push({ x: rnd() * w, y: rnd() * CH, vx: 0, vy: 0, fresh: true });
+  mol.length = N;
+  const s = Math.sqrt(C2 * p.T / 2);
+  mol.forEach(m => { if (m.fresh) { m.vx = gauss() * s; m.vy = gauss() * s; m.fresh = false; } if (m.x > w) m.x = w * rnd(); });
+  let e = 0; mol.forEach(m => e += m.vx * m.vx + m.vy * m.vy); const k = Math.sqrt(C2 * p.T / (e / N || 1)); mol.forEach(m => { m.vx *= k; m.vy *= k; });
+  hits = [];
+}
+function reset() { seed = 3; t = 0; mol = []; $('n').value = 0.4; $('T').value = 300; $('V').value = 10; sync(); draw(); }
+function step(dt) {
+  const w = width(par()), n = 4, h = dt / n;
+  for (let s = 0; s < n; s++) {
+    for (const m of mol) { m.x += m.vx * h; m.y += m.vy * h;
+      if (m.x < 0 && m.vx < 0) m.vx = -m.vx;
+      if (m.x > w && m.vx > 0) { hits.push([t, 2 * m.vx]); m.vx = -m.vx; }            // удар о поршень: импульс 2mvₓ
+      if (m.y < 0 && m.vy < 0 || m.y > CH && m.vy > 0) m.vy = -m.vy; }
+    t += h;
+  }
+  while (hits.length && hits[0][0] < t - WIN) hits.shift();
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), sc = Math.min((W - 80) / (16 * VPX), (H - 40) / CH), x0 = 20, y0 = (H - CH * sc) / 2, w = width(p);
+  g.fillStyle = '#f8fafc'; g.fillRect(x0, y0, w * sc, CH * sc);
+  g.strokeStyle = '#334155'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0 + 16 * VPX * sc + 20, y0); g.lineTo(x0, y0); g.lineTo(x0, y0 + CH * sc); g.lineTo(x0 + 16 * VPX * sc + 20, y0 + CH * sc); g.stroke();
+  g.fillStyle = '#94a3b8'; g.fillRect(x0 + w * sc, y0 + 2, 10, CH * sc - 4); g.fillRect(x0 + w * sc + 10, y0 + CH * sc / 2 - 4, 40, 8);  // поршень и шток
+  const hot = Math.min(1, (p.T - 100) / 800); g.fillStyle = `rgb(${Math.round(37 + 183 * hot)},${Math.round(99 - 60 * hot)},${Math.round(235 - 200 * hot)})`;
+  mol.forEach(m => { g.beginPath(); g.arc(x0 + Math.min(m.x, w) * sc, y0 + m.y * sc, 2.2, 0, 7); g.fill(); });
+  const span = Math.min(WIN, t) || 1, imp = hits.reduce((s, [, j]) => s + j, 0), pMeas = t > 0.3 ? imp / span / CH * K : NaN;
+  $('no').textContent = fmt(p.nu, 1) + ' моль'; $('To').textContent = p.T + ' К'; $('Vo').textContent = p.V + ' л';
+  $('read').innerHTML = ro('по формуле νRT/V', fmt(pTheory(p) / 1000, 0) + ' кПа') + ro('по ударам о поршень', isNaN(pMeas) ? '…' : fmt(pMeas / 1000, 0) + ' кПа') +
+    ro('молекул (в модели)', mol.length) + ro('ударов за 4 с', hits.length) + ro('время', fmt(t, 1) + ' с');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; step(dt); draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['n', 'T', 'V'].forEach(id => $(id).oninput = () => { sync(); draw(); });
+window.onresize = draw;
+reset(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

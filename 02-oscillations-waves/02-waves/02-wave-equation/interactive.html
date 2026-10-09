@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Уравнение бегущей волны</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  .eq { font:600 16px/1.4 Georgia, serif; margin:6px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Уравнение бегущей волны</h1>
+  <p class="lead">Волна y = A cos(ωt ∓ kx) на участке длиной 8 м. Синяя точка стоит при x = 1 м, оранжевая — на Δx правее. Внизу — их колебания во времени: видно, на сколько одна отстаёт от другой.</p>
+
+  <div class="card">
+    <div class="seg" id="dir"><button data-d="1" class="on">Волна вправо →</button><button data-d="-1">← Волна влево</button></div>
+    <div class="controls">
+      <label><i>Амплитуда A</i><span id="Ao"></span><input id="A" type="range" min="1" max="5" step="0.5" value="3"></label>
+      <label><i>Длина волны λ</i><span id="lo"></span><input id="l" type="range" min="0.5" max="4" step="0.1" value="2"></label>
+      <label><i>Скорость волны v</i><span id="vo"></span><input id="v" type="range" min="0.5" max="6" step="0.1" value="2"></label>
+      <label><i>Расстояние между точками Δx</i><span id="xo"></span><input id="dx" type="range" min="0" max="4" step="0.05" value="0.5"></label>
+    </div>
+    <p class="eq" id="eq"></p>
+    <div class="row"><button class="primary" id="play">⏸ Пауза</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Переключи направление волны. Какой знак стоит перед kx в каждом случае? Куда движется гребень?</li>
+      <li>Поставь Δx равным λ/4, λ/2 и λ. Какой сдвиг фаз показывает прибор? Как это видно на нижнем графике?</li>
+      <li>Увеличь амплитуду вдвое. Что стало со скоростью волны, наибольшей скоростью частиц и интенсивностью?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const LEN = 8, X1 = 1, AMAX = 0.05, TWIN = 6;
+const IDS = ['A', 'l', 'v', 'dx'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let dir = 1, t = 0, running = true, last = null;
+
+function par() { const A = +$('A').value / 100, lam = +$('l').value, v = +$('v').value, k = 2 * Math.PI / lam, w = k * v;
+  return { A, lam, v, k, w, dx: +$('dx').value }; }
+const y = (p, x, q) => p.A * Math.cos(p.w * q - dir * p.k * x);
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), x0 = 30, sw = W - 2 * x0, X = x => x0 + sw * x / LEN, gy = 14, gh = 170, Y = s => gy + gh / 2 - s / AMAX * (gh / 2 - 8);
+  // снимок волны
+  g.strokeStyle = '#e5e7eb'; g.lineWidth = 1; g.strokeRect(x0, gy, sw, gh); g.beginPath(); g.moveTo(x0, gy + gh / 2); g.lineTo(x0 + sw, gy + gh / 2); g.stroke();
+  for (let m = 1; m < LEN; m++) { g.beginPath(); g.moveTo(X(m), gy + gh / 2 - 3); g.lineTo(X(m), gy + gh / 2 + 3); g.stroke(); }
+  g.strokeStyle = '#475569'; g.lineWidth = 2; g.beginPath();
+  for (let j = 0; j <= 500; j++) { const x = LEN * j / 500; j ? g.lineTo(X(x), Y(y(p, x, t))) : g.moveTo(X(x), Y(y(p, x, t))); } g.stroke();
+  // гребень, ближайший к середине, со стрелкой скорости
+  const ph = p.w * t, xc = ((ph / p.k) * dir % p.lam + p.lam) % p.lam + Math.floor(LEN / 2 / p.lam) * p.lam;
+  if (xc < LEN) { g.fillStyle = '#d97706'; g.beginPath(); g.arc(X(xc), Y(p.A), 5, 0, 7); g.fill();
+    const a = X(xc), b = a + dir * 40, yy = Y(p.A) - 14; g.strokeStyle = g.fillStyle; g.lineWidth = 2; g.beginPath(); g.moveTo(a, yy); g.lineTo(b, yy); g.stroke();
+    g.beginPath(); g.moveTo(b, yy); g.lineTo(b - dir * 7, yy - 4); g.lineTo(b - dir * 7, yy + 4); g.fill(); }
+  const x2 = X1 + p.dx, pts = [[X1, '#2563eb'], [x2, '#ea580c']];
+  pts.forEach(([x, col]) => { if (x > LEN) return; g.strokeStyle = col; g.setLineDash([3, 3]); g.lineWidth = 1; g.beginPath(); g.moveTo(X(x), gy); g.lineTo(X(x), gy + gh); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.beginPath(); g.arc(X(x), Y(y(p, x, t)), 6, 0, 7); g.fill(); });
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('снимок y(x), деления — 1 м, шкала ±5 см', x0 + 4, gy + 12);
+  // колебания двух точек
+  const ty = gy + gh + 22, th = H - ty - 16, t0 = Math.max(0, t - TWIN), Xt = q => x0 + sw * (q - t0) / TWIN, Yt = s => ty + th / 2 - s / AMAX * (th / 2 - 6);
+  g.strokeStyle = '#e5e7eb'; g.strokeRect(x0, ty, sw, th); g.beginPath(); g.moveTo(x0, ty + th / 2); g.lineTo(x0 + sw, ty + th / 2); g.stroke();
+  pts.forEach(([x, col]) => { g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+    for (let j = 0; j <= 300; j++) { const q = t0 + (t - t0) * j / 300; j ? g.lineTo(Xt(q), Yt(y(p, x, q))) : g.moveTo(Xt(q), Yt(y(p, x, q))); } g.stroke(); });
+  g.fillStyle = '#6b6b70'; g.fillText('y(t) двух точек, окно 6 с', x0 + 4, ty + 12);
+  // уравнение и показания
+  const dphi = ((p.k * p.dx * 180 / Math.PI) % 360 + 360) % 360, nu = p.v / p.lam;
+  $('Ao').textContent = fmt(p.A * 100, 1) + ' см'; $('lo').textContent = fmt(p.lam, 1) + ' м'; $('vo').textContent = fmt(p.v, 1) + ' м/с';
+  $('xo').textContent = fmt(p.dx) + ' м = ' + fmt(p.dx / p.lam) + ' λ';
+  $('eq').textContent = 'y = ' + fmt(p.A, 3) + ' cos(' + fmt(p.w) + 't ' + (dir > 0 ? '−' : '+') + ' ' + fmt(p.k) + 'x)';
+  $('read').innerHTML = ro('волновое число k = 2π/λ', fmt(p.k) + ' рад/м') + ro('ω = kv', fmt(p.w) + ' рад/с') + ro('частота ν', fmt(nu) + ' Гц') +
+    ro('сдвиг фаз kΔx', fmt(dphi, 0) + '°') + ro('макс. скорость частиц Aω', fmt(p.A * p.w, 3) + ' м/с') + ro('интенсивность ∝ A²ω²', fmt(p.A ** 2 * p.w ** 2 * 1e4, 1) + ' усл. ед.');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); t = 0; draw(); };
+$('dir').querySelectorAll('button').forEach(b => b.onclick = () => { $('dir').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); dir = +b.dataset.d; draw(); });
+IDS.forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw(); requestAnimationFrame(tick);
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

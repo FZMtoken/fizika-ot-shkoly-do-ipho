@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Брусок на наклонной плоскости</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play, #push { min-width: 9em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Брусок на наклонной плоскости</h1>
+  <p class="lead">Сила тяжести раскладывается на составляющую вдоль склона mg·sin α и прижимающую mg·cos α.
+    Пунктирные стрелки — эти составляющие.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Угол наклона α:<span id="ao"></span><input id="a" type="range" min="0" max="60" step="1" value="30"></label>
+      <label>Коэффициент трения μ:<span id="muo"></span><input id="mu" type="range" min="0" max="0.8" step="0.01" value="0.2"></label>
+      <label>Скорость толчка вверх:<span id="v0o"></span><input id="v0" type="range" min="1" max="8" step="0.5" value="6"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Отпустить</button>
+      <button id="push">↗ Толкнуть вверх</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Без трения меняй угол. Как ускорение зависит от угла? Сравни с g·sin α.</li>
+      <li>Добавь трение и найди угол, при котором брусок только начинает соскальзывать. Сравни с arctg μ.</li>
+      <li>Толкни брусок вверх. Сравни время подъёма и время спуска обратно.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, LEN = 6, M = 1;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let s = LEN * 0.55, v = 0, t = 0, running = false, last = null, tUp = null, tTop = null, tDown = null, pushed = false;
+const al = () => +$('a').value * Math.PI / 180, mu = () => +$('mu').value;
+function acc() {               // проекция ускорения на ось вверх по склону
+  const gs = G * Math.sin(al()), fr = mu() * G * Math.cos(al());
+  if (Math.abs(v) < 1e-9) return gs <= fr ? 0 : -(gs - fr);
+  return -gs - Math.sign(v) * fr;
+}
+function state() { if (Math.abs(v) > 1e-9) return v > 0 ? 'едет вверх' : 'едет вниз'; return acc() === 0 ? 'покоится' : 'трогается'; }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const a = al(), k = Math.min((W - 60) / (LEN * Math.cos(a) + 0.5), (H - 50) / (LEN * Math.sin(a) + 0.8)), ox = 30, oy = H - 25;
+  const P = d => [ox + d * Math.cos(a) * k, oy - d * Math.sin(a) * k];
+  g.fillStyle = '#d9d6cc'; g.beginPath(); g.moveTo(...P(0)); g.lineTo(...P(LEN)); g.lineTo(P(LEN)[0], oy); g.fill();
+  g.fillRect(0, oy, W, H - oy);
+  // брусок
+  const [bx, by] = P(s), bw = 60, bh = 36;
+  g.save(); g.translate(bx, by); g.rotate(-a); g.fillStyle = '#2563eb'; g.fillRect(-bw / 2, -bh, bw, bh); g.restore();
+  const cx = bx - Math.sin(a) * bh / 2, cy = by - Math.cos(a) * bh / 2, fs = 11;     // центр бруска, пикселей на 1 Н
+  const arrow = (x1, y1, dx, dy, col, lab, dash) => { const x2 = x1 + dx * fs, y2 = y1 - dy * fs, L = Math.hypot(x2 - x1, y2 - y1); if (L < 4) return;
+    const ux = (x2 - x1) / L, uy = (y2 - y1) / L; g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.setLineDash(dash ? [5, 4] : []);
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+    g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14, y2 + uy * 14 + 4); };
+  const mg = M * G, gs = mg * Math.sin(a), gc = mg * Math.cos(a), N = gc;
+  const up = [Math.cos(a), Math.sin(a)], nrm = [-Math.sin(a), Math.cos(a)];
+  arrow(cx, cy, 0, -mg, '#16a34a', 'mg');
+  arrow(cx, cy, -up[0] * gs, -up[1] * gs, '#16a34a', 'mg·sin α', true);
+  arrow(cx, cy, -nrm[0] * gc, -nrm[1] * gc, '#16a34a', 'mg·cos α', true);
+  arrow(cx, cy, nrm[0] * N, nrm[1] * N, '#9333ea', 'N');
+  const ftr = Math.abs(v) > 1e-9 ? mu() * N : Math.min(gs, mu() * N);
+  const fdir = Math.abs(v) > 1e-9 ? -Math.sign(v) : 1;
+  arrow(bx + nrm[0] * 3, by - nrm[1] * 3, up[0] * ftr * fdir, up[1] * ftr * fdir, '#dc2626', 'Fтр');
+  // угол
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.arc(ox, oy, 40, -a, 0); g.stroke();
+  g.fillStyle = '#1d1d1f'; g.font = 'italic 14px serif'; g.textAlign = 'left'; g.fillText('α', ox + 46, oy - 6);
+
+  const A = acc();
+  $('ao').textContent = $('a').value + '°'; $('muo').textContent = fmt(mu()); $('v0o').textContent = fmt(+$('v0').value, 1) + ' м/с';
+  $('read').innerHTML = ro('состояние', state()) + ro('ускорение (модуль)', fmt(Math.abs(A)) + ' м/с²') + ro('g·sin α', fmt(G * Math.sin(a)) + ' м/с²') +
+    ro('tg α и μ', `${fmt(Math.tan(a))} и ${fmt(mu())}`) + ro('время подъёма', tTop === null ? '—' : fmt(tTop) + ' с') + ro('время спуска', tDown === null ? '—' : fmt(tDown) + ' с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) { const dt = Math.min(0.05, (ts - last) / 1000);
+    for (let i = 0; i < 20; i++) { const h = dt / 20, before = v; v += acc() * h;
+      if (before > 0 && v <= 0) { v = 0; if (pushed && tTop === null) tTop = t; }
+      s += v * h; t += h; }
+    if (s <= 0 || s >= LEN) { if (s <= 0 && pushed && tTop !== null) tDown = t - tTop; s = Math.max(0, Math.min(LEN, s)); running = false; }
+    if (Math.abs(v) < 1e-9 && acc() === 0 && t > 0.05) running = false;
+    if (!running) { $('play').textContent = '▶ Отпустить'; draw(); return; } }
+  last = ts; draw(); requestAnimationFrame(tick);
+}
+function reset() { running = false; s = LEN * 0.55; v = 0; t = 0; tTop = null; tDown = null; pushed = false; $('play').textContent = '▶ Отпустить'; draw(); }
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Отпустить'; return; } running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+$('push').onclick = () => { reset(); s = 0.05; v = +$('v0').value; pushed = true; running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['a', 'mu', 'v0'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

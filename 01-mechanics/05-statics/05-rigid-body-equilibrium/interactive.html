@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лестница у стены</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 12em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .ro b.ok { color:#16a34a; } .ro b.bad { color:#dc2626; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Лестница у стены</h1>
+  <p class="lead">Однородная лестница длиной 4 м стоит на шероховатом полу у гладкой стены. Стена давит только горизонтально, поэтому всё горизонтальное усилие держит трение о пол.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Угол лестницы с полом α</i><span id="alo"></span><input id="al" type="range" min="20" max="85" step="1" value="65"></label>
+      <label><i>Коэффициент трения о пол μ</i><span id="muo"></span><input id="mu" type="range" min="0.05" max="1" step="0.05" value="0.3"></label>
+      <label><i>Масса лестницы m</i><span id="mo"></span><input id="m" type="range" min="5" max="30" step="1" value="10"></label>
+      <label><i>Масса человека M</i><span id="Mo"></span><input id="M" type="range" min="0" max="100" step="5" value="70"></label>
+      <label><i>Человек поднялся на x (вдоль лестницы)</i><span id="xo"></span><input id="x" type="range" min="0" max="4" step="0.05" value="0"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Подниматься</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь массу человека 0 и μ = 0,3. Найди наименьший угол, при котором лестница стоит. Сравни с формулой tg α = 1 / (2μ).</li>
+      <li>Поставь угол 65° и нажми «Подниматься». На какой высоте лестница поехала? Как поднять человека до самого верха?</li>
+      <li>Двигай человека вверх и следи за реакциями. Почему реакция пола не меняется, а реакция стены растёт?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, D = Math.PI / 180, L = 4;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const IDS = ['al', 'mu', 'm', 'M', 'x'], DEF = Object.fromEntries(IDS.map(id => [id, $(id).value]));
+let phase = 'idle', slip = 0, last = null;                  // phase: idle | climb | slip | done; slip — уменьшение угла при падении
+
+function calc() {
+  const v = Object.fromEntries(IDS.map(id => [id, +$(id).value])), a = v.al * D;
+  const N1 = (v.m + v.M) * G, N2 = G / Math.tan(a) * (v.m / 2 + v.M * v.x / L);
+  const xmax = v.M > 0 ? (v.mu * N1 * Math.tan(a) / G - v.m / 2) * L / v.M : null;
+  return { ...v, a, N1, N2, Fmax: v.mu * N1, ok: N2 <= v.mu * N1 + 1e-9, xmax, amin: Math.atan((v.m / 2 + v.M * v.x / L) / (v.mu * (v.m + v.M))) / D };
+}
+
+function arrow(g, x1, y1, x2, y2, col, lab, dx = 6, dy = -4) {
+  const Ln = Math.hypot(x2 - x1, y2 - y1); if (Ln < 3) return; const ux = (x2 - x1) / Ln, uy = (y2 - y1) / Ln;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  if (lab) { g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText(lab, x2 + dx, y2 + dy); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const S = calc(), a = Math.max(0.02, S.a - slip), k = Math.min((H - 50) / L, (W - 140) / L), wx = 40, y0 = H - 20;
+  // стена и пол
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, 0, wx, H); g.fillRect(0, y0, W, 20);
+  const bx = wx + k * L * Math.cos(a), by = y0, tx = wx, ty = y0 - k * L * Math.sin(a);
+  // лестница
+  g.strokeStyle = '#8b6f3a'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(bx, by); g.lineTo(tx, ty); g.stroke(); g.lineCap = 'butt';
+  g.strokeStyle = '#c8a96a'; g.lineWidth = 2; for (let i = 1; i < 12; i++) { const px = bx + (tx - bx) * i / 12, py = by + (ty - by) * i / 12; g.beginPath(); g.moveTo(px - 5, py - 3); g.lineTo(px + 5, py + 3); g.stroke(); }
+  const P = u => [bx + (tx - bx) * u / L, by + (ty - by) * u / L], fs = 0.12;
+  // силы
+  const [mx, my] = P(L / 2); arrow(g, mx - 14, my, mx - 14, my + S.m * G * fs * 2, '#16a34a', 'mg', -30, 4);
+  if (S.M > 0) { const [hx, hy] = P(S.x);
+    g.fillStyle = '#2563eb'; g.beginPath(); g.arc(hx - 4, hy - 30, 8, 0, 7); g.fill(); g.fillRect(hx - 9, hy - 22, 10, 22);
+    arrow(g, hx + 10, hy - 10, hx + 10, Math.min(hy - 10 + S.M * G * fs, y0 - 2), '#16a34a', 'Mg', 6, 4); }
+  const vis = f => f > 0.5 ? Math.max(14, f * fs) : 0;   // малые силы рисуем не короче 14 px, чтобы была видна подпись
+  arrow(g, tx, ty, tx + vis(S.N2), ty, '#7c3aed', 'N₂', -4, -10);
+  arrow(g, bx, by, bx, by - S.N1 * fs * 0.6, '#7c3aed', 'N₁');
+  const F = Math.min(S.N2, S.Fmax); arrow(g, bx, by - 4, bx - vis(F), by - 4, '#b45309', 'Fтр', -30, 17);
+  g.setLineDash([4, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1; g.beginPath(); g.arc(bx, by, 40, Math.PI, Math.PI + a); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'right'; g.fillText('α', bx - 46, by - 8);
+  g.font = '600 14px system-ui'; g.textAlign = 'right'; g.fillStyle = S.ok && phase !== 'slip' && phase !== 'done' ? '#16a34a' : '#dc2626';
+  g.fillText(phase === 'slip' || phase === 'done' ? 'лестница поехала!' : S.ok ? 'лестница стоит' : 'трения не хватает — лестница поедет', W - 12, 22);
+  // показания
+  $('alo').textContent = S.al + '°'; $('muo').textContent = fmt(S.mu, 2); $('mo').textContent = S.m + ' кг'; $('Mo').textContent = S.M + ' кг';
+  $('xo').textContent = fmt(S.x, 2) + ' м из 4 (высота ' + fmt(S.x * Math.sin(S.a), 2) + ' м)';
+  $('read').innerHTML = ro('реакция пола N₁', fmt(S.N1) + ' Н') + ro('реакция стены N₂', fmt(S.N2) + ' Н') +
+    ro('нужное трение', fmt(S.N2) + ' Н', S.ok ? 'ok' : 'bad') + ro('наибольшее трение μN₁', fmt(S.Fmax) + ' Н') +
+    ro('наименьший угол сейчас', fmt(S.amin) + '°') +
+    ro('человек дойдёт до', S.M === 0 ? '—' : S.xmax >= L ? 'самого верха' : S.xmax < 0 ? 'не встанет' : fmt(S.xmax, 2) + ' м');
+}
+
+function stop() { phase = 'idle'; $('play').textContent = '▶ Подниматься'; }
+function tick(ts) {
+  if (phase !== 'climb' && phase !== 'slip') return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  if (phase === 'climb') {
+    const S = calc();
+    if (!S.ok) phase = 'slip';
+    else if (S.x >= L) { stop(); draw(); return; }
+    else $('x').value = Math.min(L, S.x + 0.6 * dt);
+  } else { slip += (0.3 + slip * 4) * dt; if (calc().a - slip <= 0.03) { phase = 'done'; $('play').textContent = '▶ Подниматься'; draw(); return; } }
+  draw(); requestAnimationFrame(tick);
+}
+$('play').onclick = () => {
+  if (phase === 'climb' || phase === 'slip') { stop(); draw(); return; }
+  slip = 0; if (+$('x').value >= L || phase === 'done') $('x').value = 0; phase = 'climb'; last = null; $('play').textContent = '⏸ Стоп'; requestAnimationFrame(tick);
+};
+$('reset').onclick = () => { IDS.forEach(id => $(id).value = DEF[id]); slip = 0; stop(); draw(); };
+IDS.forEach(id => $(id).oninput = () => { slip = 0; stop(); draw(); });
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

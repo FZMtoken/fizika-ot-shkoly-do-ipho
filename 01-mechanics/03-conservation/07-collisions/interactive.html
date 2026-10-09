@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Столкновение шаров</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .c1 { color:#2563eb; } .c2 { color:#16a34a; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Столкновение шаров</h1>
+  <p class="lead"><b class="c1">Синий</b> шар налетает со скоростью 2 м/с на покоящийся <b class="c2">зелёный</b>.
+    Прицельное расстояние — смещение линии движения синего шара от центра зелёного. Размер шара отражает массу.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Прицельное расстояние b:<span id="bo"></span><input id="b" type="range" min="0" max="0.95" step="0.05" value="0.5"></label>
+      <label class="c2">Отношение масс m₂/m₁:<span id="mo"></span><input id="m" type="range" min="0.25" max="4" step="0.25" value="1"></label>
+      <label>Коэффициент восстановления e:<span id="eo"></span><input id="e" type="range" min="0" max="1" step="0.05" value="1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="320"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Равные массы, b = 0, e = 1. Что стало со скоростями шаров?</li>
+      <li>Сдвинь прицел при равных массах и e = 1. Каков угол разлёта? Меняется ли он при другом b?</li>
+      <li>Сделай зелёный шар тяжелее. Может ли синий отскочить назад? А при лёгком зелёном шаре?</li>
+      <li>Уменьши e. Что сохраняется всегда, а что теряется?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const U = 2, X0 = -4, TMAX = 6;           // начальная скорость (м/с), старт синего шара, время записи
+let t = 0, running = false, last = null;
+function P() {
+  const k = +$('m').value, e = +$('e').value, m1 = 1, m2 = k;
+  const R1 = 0.35, R2 = 0.35 * Math.cbrt(k), b = +$('b').value * (R1 + R2);     // b в долях суммы радиусов
+  const D = R1 + R2, xc = -Math.sqrt(D * D - b * b), tc = (xc - X0) / U;          // момент касания
+  const nx = -xc / D, ny = -b / D;                                                 // нормаль от синего к зелёному
+  const un = U * nx, J = (1 + e) * m1 * m2 / (m1 + m2) * un;
+  const v1 = [U - J / m1 * nx, -J / m1 * ny], v2 = [J / m2 * nx, J / m2 * ny];
+  return { k, e, m1, m2, R1, R2, b, xc, tc, v1, v2 };
+}
+function pos(p, tt) {
+  if (tt <= p.tc) return [[X0 + U * tt, p.b], [0, 0]];
+  const d = tt - p.tc; return [[p.xc + p.v1[0] * d, p.b + p.v1[1] * d], [p.v2[0] * d, p.v2[1] * d]];
+}
+const len = v => Math.hypot(v[0], v[1]), deg = v => Math.atan2(v[1], v[0]) * 180 / Math.PI;
+function arrow(g, x, y, dx, dy, col, off = 0) {
+  const L = Math.hypot(dx, dy); if (L < 3) return; const ux = dx / L, uy = dy / L; x += ux * off; y += uy * off;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx - ux * 7, y + dy - uy * 7); g.stroke();
+  g.beginPath(); g.moveTo(x + dx, y + dy); g.lineTo(x + dx - ux * 11 - uy * 5, y + dy - uy * 11 + ux * 5); g.lineTo(x + dx - ux * 11 + uy * 5, y + dy - uy * 11 - ux * 5); g.fill();
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), XW = 5, YW = 3, k = Math.min(W / (2 * XW), H / (2 * YW));
+  const sx = x => W / 2 + x * k, sy = y => H / 2 - y * k;
+  g.fillStyle = '#e8f3ec'; g.fillRect(0, 0, W, H);
+  // исходная линия движения и траектории
+  g.strokeStyle = '#94a3b8'; g.setLineDash([5, 5]); g.lineWidth = 1; g.beginPath(); g.moveTo(sx(-XW), sy(p.b)); g.lineTo(sx(XW), sy(p.b)); g.stroke(); g.setLineDash([]);
+  const N = 60, tt = Math.min(t, TMAX);
+  for (const [i, col] of [[0, '#2563eb'], [1, '#16a34a']]) {
+    g.strokeStyle = col + '88'; g.lineWidth = 2; g.beginPath();
+    for (let j = 0; j <= N; j++) { const q = pos(p, tt * j / N)[i]; j ? g.lineTo(sx(q[0]), sy(q[1])) : g.moveTo(sx(q[0]), sy(q[1])); } g.stroke(); }
+  const [q1, q2] = pos(p, tt), after = tt > p.tc;
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(sx(q1[0]), sy(q1[1]), p.R1 * k, 0, 7); g.fill();
+  g.fillStyle = '#16a34a'; g.beginPath(); g.arc(sx(q2[0]), sy(q2[1]), p.R2 * k, 0, 7); g.fill();
+  const A = 0.9 * k;                         // 1 м/с на рисунке
+  const w1 = after ? p.v1 : [U, 0], w2 = after ? p.v2 : [0, 0];
+  arrow(g, sx(q1[0]), sy(q1[1]), w1[0] * A, -w1[1] * A, '#1e3a8a', p.R1 * k);
+  arrow(g, sx(q2[0]), sy(q2[1]), w2[0] * A, -w2[1] * A, '#14532d', p.R2 * k);
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'left'; g.fillText('стрелки — скорости', 8, 16);
+  // итоги удара
+  const a1 = deg(p.v1), a2 = deg(p.v2), s1 = len(p.v1), s2 = len(p.v2);
+  let between = Math.abs(a1 - a2); if (between > 180) between = 360 - between;
+  const Ek0 = p.m1 * U * U / 2, Ek = p.m1 * s1 * s1 / 2 + p.m2 * s2 * s2 / 2;
+  const px = p.m1 * p.v1[0] + p.m2 * p.v2[0], py = p.m1 * p.v1[1] + p.m2 * p.v2[1];
+  $('bo').textContent = fmt(+$('b').value, 2) + ' · (R₁ + R₂)'; $('mo').textContent = fmt(p.k, 2) + ' (m₁ = 1 кг)'; $('eo').textContent = fmt(p.e, 2);
+  $('read').innerHTML = ro('синий после удара', fmt(s1) + ' м/с', 'c1') + ro('зелёный после удара', fmt(s2) + ' м/с', 'c2') +
+    ro('отклонение синего', s1 < 1e-6 ? 'остановился' : fmt(Math.abs(a1), 1) + '°', 'c1') + ro('угол разлёта', s1 < 1e-6 || s2 < 1e-6 ? '—' : fmt(between, 1) + '°') +
+    ro('импульс до / после', fmt(p.m1 * U) + ' / ' + fmt(Math.hypot(px, py)) + ' кг·м/с') + ro('сохранилось энергии', fmt(Ek / Ek0 * 100, 1) + ' %');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000);
+  last = ts; draw();
+  if (t >= TMAX) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= TMAX) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['b', 'm', 'e'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

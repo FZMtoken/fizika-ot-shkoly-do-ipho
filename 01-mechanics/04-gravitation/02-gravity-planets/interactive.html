@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ускорение свободного падения внутри и снаружи планеты</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .cg { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ускорение свободного падения внутри и снаружи планеты</h1>
+  <p class="lead">Планета считается однородным шаром. Двигай пробное тело от центра планеты до расстояния 4R.
+    Снаружи g убывает как 1/r², внутри — растёт пропорционально r.</p>
+
+  <div class="card">
+    <div class="seg" id="pl">
+      <button data-p="0" class="on">Земля</button><button data-p="1">Луна</button><button data-p="2">Марс</button><button data-p="3">Юпитер</button>
+    </div>
+    <div class="controls">
+      <label>Расстояние от центра r:<span id="ro"></span><input id="r" type="range" min="0" max="4" step="0.01" value="1"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>На Земле найди расстояние, где g вдвое меньше, чем у поверхности. Сравни с R√2.</li>
+      <li>Где g больше: на глубине R/2 или на высоте R/2?</li>
+      <li>Сравни вес человека массой 70 кг на разных планетах.</li>
+      <li>Почему на Юпитере g всего примерно в 2,6 раза больше земного, хотя его масса больше в 318 раз?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const GC = 6.67e-11;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const PL = [
+  { n: 'Земля', M: 5.97e24, R: 6.371e6, col: '#2563eb' },
+  { n: 'Луна', M: 7.35e22, R: 1.737e6, col: '#94a3b8' },
+  { n: 'Марс', M: 6.42e23, R: 3.39e6, col: '#dc6b2f' },
+  { n: 'Юпитер', M: 1.898e27, R: 6.99e7, col: '#c08a5b' },
+];
+let pi = 0;
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = PL[pi], k = +$('r').value, g0 = GC * p.M / (p.R * p.R), gk = k <= 1 ? g0 * k : g0 / (k * k);
+  const L = 50, Rt = 14, Tp = 24, B = 30, GM = 26;                     // шкала g до 26 м/с² (Юпитер ≈ 24,8)
+  const sx = x => L + x / 4 * (W - L - Rt), sy = v => H - B - v / GM * (H - Tp - B);
+  // область внутри планеты
+  g.fillStyle = p.col + '22'; g.fillRect(sx(0), Tp, sx(1) - sx(0), H - B - Tp);
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('внутри планеты', (sx(0) + sx(1)) / 2, Tp + 12);
+  g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let v = 0; v <= GM; v += 5) { g.beginPath(); g.moveTo(L, sy(v)); g.lineTo(W - Rt, sy(v)); g.stroke(); g.fillText(v, L - 4, sy(v) + 4); }
+  g.textAlign = 'center'; for (let x = 0; x <= 4; x++) g.fillText(x ? x + 'R' : '0', sx(x), H - 12);
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(L, H - B); g.lineTo(W - Rt, H - B); g.stroke();
+  // кривые остальных планет — тонко, выбранной — толсто
+  PL.forEach((q, i) => { const q0 = GC * q.M / (q.R * q.R); g.strokeStyle = q.col; g.lineWidth = i === pi ? 3 : 1; g.globalAlpha = i === pi ? 1 : 0.45; g.beginPath();
+    for (let x = 0; x <= 4.0001; x += 0.02) { const v = x <= 1 ? q0 * x : q0 / (x * x); x ? g.lineTo(sx(x), sy(v)) : g.moveTo(sx(x), sy(v)); } g.stroke(); });
+  g.globalAlpha = 1;
+  // пробное тело
+  g.strokeStyle = '#dc2626'; g.setLineDash([4, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(sx(k), H - B); g.lineTo(sx(k), sy(gk)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(sx(k), sy(gk), 6, 0, 7); g.fill();
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('g, м/с²', L, 14);
+  const h = (k - 1) * p.R / 1000;
+  $('ro').textContent = fmt(k, 2) + ' R (' + (h >= 0 ? 'высота ' : 'глубина ') + fmt(Math.abs(h), 0) + ' км)';
+  $('read').innerHTML = ro('g у поверхности', fmt(g0) + ' м/с²') + ro('g в этой точке', fmt(gk) + ' м/с²', 'cg') + ro('доля от g у поверхности', fmt(gk / g0 * 100, 1) + ' %') +
+    ro('вес человека 70 кг', fmt(70 * gk, 0) + ' Н') + ro('радиус планеты', fmt(p.R / 1000, 0) + ' км');
+}
+$('pl').querySelectorAll('button').forEach(b => b.onclick = () => { $('pl').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); pi = +b.dataset.p; draw(); });
+$('r').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

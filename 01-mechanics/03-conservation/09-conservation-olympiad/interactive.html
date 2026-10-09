@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Двойной мяч</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .c1 { color:#d97706; } .c2 { color:#2563eb; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Двойной мяч</h1>
+  <p class="lead"><b class="c1">Маленький мяч</b> лежит на <b class="c2">большом</b>, их роняют вместе. Большой отскакивает от пола и тут же сталкивается с маленьким,
+    который ещё летит вниз. Размерами мячей в расчёте пренебрегаем, высоты отсчитываются от точки удара.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>Высота падения h:<span id="ho"></span><input id="h" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+      <label>Отношение масс M/m:<span id="ko"></span><input id="k" type="range" min="1" max="30" step="1" value="3"></label>
+      <label>Коэффициент восстановления e:<span id="eo"></span><input id="e" type="range" min="0.5" max="1" step="0.05" value="1"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Поставь M/m = 30 и e = 1. Во сколько раз маленький мяч подлетает выше исходной высоты? Сравни с 9.</li>
+      <li>Поставь M/m = 3. Что происходит с большим мячом после удара? Куда делась его энергия?</li>
+      <li>При M/m = 1 мячи просто обмениваются скоростями. Проверь.</li>
+      <li>Уменьши e до 0,8. Как сильно падает высота маленького мяча?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, running = false, last = null;
+function P() {
+  const h = +$('h').value, k = +$('k').value, e = +$('e').value, m = 1, M = k;
+  const v = Math.sqrt(2 * G * h), T0 = v / G;
+  // удар большого о пол: +e·v; затем удар мячей (ось вверх): большой +e·v, маленький −v
+  const ub = e * v, us = -v, rel = e * (ub - us);
+  const vs = (M * ub + m * us + M * rel) / (M + m), vb = vs - rel;
+  const Hs = vs > 0 ? vs * vs / (2 * G) : 0, Hb = vb > 0 ? vb * vb / (2 * G) : 0;
+  const Ts = vs > 0 ? 2 * vs / G : 0, Tb = vb > 0 ? 2 * vb / G : 0;
+  return { h, k, e, m, M, v, T0, vs, vb, Hs, Hb, Ts, Tb, tEnd: T0 + Math.max(Ts, Tb, 0.3) };
+}
+function heights(p, tt) {                     // высоты нижних точек мячей
+  if (tt <= p.T0) { const y = p.h - G * tt * tt / 2; return [y, y]; }
+  const s = tt - p.T0, yb = Math.min(s, p.Tb) * p.vb - G * Math.min(s, p.Tb) ** 2 / 2, ys = Math.min(s, p.Ts) * p.vs - G * Math.min(s, p.Ts) ** 2 / 2;
+  return [Math.max(0, yb), Math.max(0, ys)];
+}
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const p = P(), B = 24, Tp = 16, YM = Math.max(p.h, p.Hs, p.Hb) * 1.08, Rb = 22, Rs = 9;
+  const sy = y => H - B - y / YM * (H - B - Tp - 2 * Rb - 2 * Rs);
+  g.fillStyle = '#e7e2d6'; g.fillRect(0, H - B, W, B);
+  // шкала высот
+  const step = YM > 12 ? 4 : YM > 6 ? 2 : YM > 3 ? 1 : 0.5;
+  g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let y = 0; y <= YM; y += step) { g.strokeStyle = '#ecece6'; g.beginPath(); g.moveTo(44, sy(y)); g.lineTo(W - 10, sy(y)); g.stroke(); g.fillStyle = '#6b6b70'; g.fillText(fmt(y, 1) + ' м', 40, sy(y) + 4); }
+  // уровни: старт, высота маленького
+  const lvl = (y, col, txt) => { g.strokeStyle = col; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(44, sy(y)); g.lineTo(W - 10, sy(y)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.textAlign = 'right'; g.fillText(txt, W - 12, sy(y) - 4); };
+  lvl(p.h, '#6b6b70', 'старт h');
+  if (p.Hs > 0) lvl(p.Hs, '#d97706', 'маленький: ' + fmt(p.Hs / p.h, 2) + ' h');
+  const [yb, ys] = heights(p, Math.min(t, p.tEnd)), cx = W / 2, together = t <= p.T0;
+  const bigY = sy(yb) - Rb, smallY = together ? bigY - Rb - Rs : Math.min(sy(ys) - Rs, sy(yb) - 2 * Rb - Rs);
+  g.fillStyle = '#2563eb'; g.beginPath(); g.arc(cx - (together ? 0 : 0), bigY, Rb, 0, 7); g.fill();
+  g.fillStyle = '#d97706'; g.beginPath(); g.arc(cx + (together ? 0 : 30), smallY, Rs, 0, 7); g.fill();
+  const Ek0 = (p.m + p.M) * p.v * p.v / 2, Ek1 = p.m * p.vs ** 2 / 2 + p.M * p.vb ** 2 / 2;
+  $('ho').textContent = fmt(p.h, 1) + ' м'; $('ko').textContent = p.k; $('eo').textContent = fmt(p.e, 2);
+  $('read').innerHTML = ro('скорость перед полом', fmt(p.v) + ' м/с') + ro('маленький после удара', fmt(p.vs) + ' м/с', 'c1') + ro('большой после удара', fmt(p.vb) + ' м/с', 'c2') +
+    ro('высота маленького', fmt(p.Hs) + ' м', 'c1') + ro('высота большого', fmt(p.Hb) + ' м', 'c2') + ro('сохранилось энергии', fmt(Ek1 / Ek0 * 100, 1) + ' %');
+}
+function tick(ts) { if (!running) return;
+  if (last !== null) t += Math.min(0.05, (ts - last) / 1000);
+  last = ts; draw();
+  if (t >= P().tEnd) { running = false; $('play').textContent = '▶ Пуск'; return; }
+  requestAnimationFrame(tick); }
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { if (t >= P().tEnd) t = 0; running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+['h', 'k', 'e'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

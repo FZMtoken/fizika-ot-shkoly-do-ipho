@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Жидкость в движущемся сосуде</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 12px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off] { display:none; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Жидкость в движущемся сосуде</h1>
+  <p class="lead">Сосуд шириной 20 см (радиус 10 см) налит водой до 10 см, высота стенок 30 см. Разгоняй его по горизонтали или вращай вокруг оси и смотри на форму поверхности. Под дном — давление воды в трёх точках.</p>
+
+  <div class="card">
+    <div class="seg" id="mode"><button data-m="acc" class="on">Разгон по горизонтали</button><button data-m="rot">Вращение вокруг оси</button></div>
+    <div class="controls">
+      <label><i id="pl">Ускорение a (вправо — плюс)</i><span id="po"></span><input id="p" type="range" min="-8" max="8" step="0.5" value="3"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Разгоняй сосуд и сравни угол наклона поверхности с arctg(a/g).</li>
+      <li>Переключись на вращение. При какой угловой скорости вода на оси опустится до дна? Сравни с задачей о сосуде, где дно обнажается.</li>
+      <li>Следи за давлением на дне. Почему в центре вращающегося сосуда оно меньше, чем у стенки?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10, R = 0.1, H0 = 0.1, HW = 0.3, RHO = 1000;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let mode = 'acc', aVal = 3, wVal = 15;
+const A = () => mode === 'acc' ? +$('p').value : aVal, Wv = () => mode === 'rot' ? +$('p').value : wVal;
+
+// высота поверхности z(x) над дном, x от −R до R; null — дно обнажено
+function surface() {
+  if (mode === 'acc') {
+    const a = A(), k = -a / G;                    // при разгоне вправо вода поднимается слева
+    let lo = 0, hi = 0;                                     // при большом наклоне часть дна обнажается: ищем уровень сохранения объёма
+    const area = c0 => { let s = 0; for (let i = 0; i < 400; i++) { const x = -R + (i + 0.5) * 2 * R / 400; s += Math.max(0, c0 + k * x); } return s * 2 * R / 400; };
+    lo = -1; hi = 1; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; area(m) < 2 * R * H0 ? lo = m : hi = m; }
+    const c0 = (lo + hi) / 2; return { z: x => c0 + k * x, ang: Math.atan(Math.abs(a) / G) * 180 / Math.PI };
+  }
+  const w = Wv(), q = w * w / (2 * G);
+  let z0 = H0 - q * R * R / 2;                              // объём под параболоидом в осевом сечении (цилиндр)
+  if (z0 >= 0) return { z: x => z0 + q * x * x, r0: 0 };
+  const r0 = Math.sqrt(Math.max(0, R * R - 2 * R * Math.sqrt(G * H0) / w));
+  return { z: x => q * (x * x - r0 * r0), r0 };
+}
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const S = surface(), k = Math.min((H - 70) / HW, (W - 60) / (2 * R) * 0.6), cx = W / 2, by = H - 40, X = x => cx + x * k, Y = z => by - z * k;
+  // вода
+  g.fillStyle = '#bfdbfe'; g.beginPath(); g.moveTo(X(-R), by);
+  for (let i = 0; i <= 200; i++) { const x = -R + 2 * R * i / 200; g.lineTo(X(x), Y(Math.min(HW, Math.max(0, S.z(x))))); }
+  g.lineTo(X(R), by); g.closePath(); g.fill();
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i <= 200; i++) { const x = -R + 2 * R * i / 200; const z = Math.min(HW, Math.max(0, S.z(x))); i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z)); } g.stroke();
+  // сосуд
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 3; g.beginPath(); g.moveTo(X(-R), Y(HW)); g.lineTo(X(-R), by); g.lineTo(X(R), by); g.lineTo(X(R), Y(HW)); g.stroke();
+  if (mode === 'rot') { g.setLineDash([5, 5]); g.strokeStyle = '#6b6b70'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, Y(HW) - 10); g.lineTo(cx, by + 10); g.stroke(); g.setLineDash([]); }
+  else { const a = A(); if (a !== 0) { g.strokeStyle = g.fillStyle = '#dc2626'; g.lineWidth = 2.5; const x1 = cx - 30 * Math.sign(a), x2 = cx + 30 * Math.sign(a), y = Y(HW) - 14;
+    g.beginPath(); g.moveTo(x1, y); g.lineTo(x2, y); g.stroke(); g.beginPath(); g.moveTo(x2, y); g.lineTo(x2 - 10 * Math.sign(a), y - 5); g.lineTo(x2 - 10 * Math.sign(a), y + 5); g.fill();
+    g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText('a', cx, y - 8); } }
+  // давление на дне
+  const pts = [-0.9 * R, 0, 0.9 * R], ps = pts.map(x => RHO * G * Math.max(0, S.z(x)));
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'center';
+  pts.forEach((x, i) => { g.beginPath(); g.arc(X(x), by - 4, 3, 0, 7); g.fill(); g.fillText(fmt(ps[i], 0) + ' Па', X(x), by + 18); });
+  const spill = [-R, R].some(x => S.z(x) > HW), dry = [-R, 0, R].some(x => S.z(x) < 0);
+  g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillStyle = spill ? '#dc2626' : dry ? '#d97706' : '#16a34a';
+  g.fillText(spill ? 'вода выплёскивается через край' : dry ? 'дно частично обнажилось' : 'вода в сосуде', 12, 22);
+  // показания
+  $('po').textContent = mode === 'acc' ? fmt(A(), 1) + ' м/с²' : fmt(Wv(), 1) + ' рад/с';
+  const w = Wv(), zl = S.z(-R), zr = S.z(R);
+  $('read').innerHTML = mode === 'acc'
+    ? ro('угол поверхности (по рисунку)', fmt(Math.atan(Math.abs(S.z(-R / 2) - S.z(R / 2)) / R) * 180 / Math.PI, 1) + '°') + ro('arctg(a/g)', fmt(S.ang, 1) + '°') + ro('уровень слева', fmt(Math.max(0, zl) * 100) + ' см') + ro('уровень справа', fmt(Math.max(0, zr) * 100) + ' см')
+    : ro('уровень у стенки', fmt(Math.min(HW, zr) * 100) + ' см') + ro('уровень на оси', fmt(Math.max(0, S.z(0)) * 100) + ' см') + ro('ω²R²/(2g)', fmt(w * w * R * R / (2 * G) * 100) + ' см') + ro('дно обнажится при ω', fmt(2 * Math.sqrt(G * H0) / R) + ' рад/с');
+}
+
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => { $('mode').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); if (mode === 'acc') aVal = A(); else wVal = Wv(); mode = b.dataset.m;
+  const sl = $('p'); if (mode === 'acc') { sl.min = -8; sl.max = 8; sl.value = aVal; $('pl').textContent = 'Ускорение a (вправо — плюс)'; } else { sl.min = 0; sl.max = 35; sl.value = wVal; $('pl').textContent = 'Угловая скорость ω'; } draw(); });
+$('p').oninput = draw;
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

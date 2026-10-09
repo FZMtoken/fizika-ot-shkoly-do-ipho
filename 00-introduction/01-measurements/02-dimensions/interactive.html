@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор размерностей</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .formula { font-size:1.25rem; font-family: "Cambria Math", "Times New Roman", serif; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ok { color:#16a34a; } .no { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  .slot[data-off] { visibility:hidden; }
+  label i { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Конструктор размерностей</h1>
+  <p class="lead">Подбери показатели степеней так, чтобы размерность правой части совпала с размерностью искомой величины.</p>
+
+  <div class="card">
+    <div class="row">
+      <div class="seg" id="mode">
+        <button data-m="pend" class="on">Маятник</button><button data-m="wave">Волны</button>
+        <button data-m="sound">Звук</button><button data-m="blast">Взрыв</button>
+      </div>
+      <button id="solve">Показать решение</button>
+      <button id="zero">Сбросить</button>
+    </div>
+    <div class="controls">
+      <label class="slot" id="s0"><i></i><span></span><input type="range" min="-2" max="2" step="0.1" value="0"></label>
+      <label class="slot" id="s1"><i></i><span></span><input type="range" min="-2" max="2" step="0.1" value="0"></label>
+      <label class="slot" id="s2"><i></i><span></span><input type="range" min="-2" max="2" step="0.1" value="0"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="formula" id="formula"></p>
+    <canvas id="c" height="230"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>В режиме «Маятник» подбери показатели так, чтобы получилась размерность времени.</li>
+      <li>Можно ли добиться совпадения, если масса входит с ненулевой степенью? Почему?</li>
+      <li>В режиме «Волны» проверь, зависит ли скорость волн на глубокой воде от плотности воды.</li>
+      <li>В режиме «Взрыв» найди, как радиус огненного шара зависит от энергии, плотности воздуха и времени.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+// размерности как [M, L, T]
+const MODES = {
+  pend:  { target: ['T', 'период', [0, 0, 1]], q: [['m', 'масса груза', [1, 0, 0]], ['l', 'длина нити', [0, 1, 0]], ['g', 'ускорение g', [0, 1, -2]]], sol: [0, 0.5, -0.5] },
+  wave:  { target: ['v', 'скорость волны', [0, 1, -1]], q: [['g', 'ускорение g', [0, 1, -2]], ['λ', 'длина волны', [0, 1, 0]], ['ρ', 'плотность воды', [1, -3, 0]]], sol: [0.5, 0.5, 0] },
+  sound: { target: ['v', 'скорость звука', [0, 1, -1]], q: [['p', 'давление', [1, -1, -2]], ['ρ', 'плотность газа', [1, -3, 0]]], sol: [0.5, -0.5] },
+  blast: { target: ['R', 'радиус шара', [0, 1, 0]], q: [['E', 'энергия', [1, 2, -2]], ['ρ', 'плотность воздуха', [1, -3, 0]], ['t', 'время', [0, 0, 1]]], sol: [0.2, -0.2, 0.4] },
+};
+let mode = 'pend';
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const sup = n => fmt(n).replace(',', '.').replace('−', '⁻').replace(/[\d.]/g, d => d === '.' ? '·' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]);
+const dimStr = d => ['M', 'L', 'T'].map((b, i) => Math.abs(d[i]) < 1e-9 ? '' : b + (Math.abs(d[i] - 1) < 1e-9 ? '' : sup(d[i]))).join(' ').trim() || '1 (безразмерно)';
+
+function setup() {
+  const M = MODES[mode];
+  [0, 1, 2].forEach(i => {
+    const el = $('s' + i), q = M.q[i];
+    if (!q) { el.dataset.off = ''; el.querySelector('i').textContent = '—:'; el.querySelector('span').textContent = ' '; return; }
+    delete el.dataset.off; el.querySelector('i').textContent = `Степень ${q[0]} (${q[1]}):`; el.querySelector('i').style.fontStyle = 'normal';
+    el.querySelector('input').value = 0;
+  });
+}
+const ex = () => MODES[mode].q.map((_, i) => +$('s' + i).querySelector('input').value);
+
+function draw() {
+  const M = MODES[mode], e = ex();
+  const d = [0, 1, 2].map(k => M.q.reduce((s, q, i) => s + q[2][k] * e[i], 0));
+  const tgt = M.target[2], match = d.map((v, k) => Math.abs(v - tgt[k]) < 1e-9);
+  M.q.forEach((q, i) => $('s' + i).querySelector('span').textContent = fmt(e[i], 1));
+  $('formula').innerHTML = `${M.target[0]} = C · ` + M.q.map((q, i) => `${q[0]}<sup>${fmt(e[i], 1)}</sup>`).join(' · ') +
+    (match.every(Boolean) ? ' <span class="ok">✓ размерность совпала</span>' : '');
+
+  // столбики показателей M, L, T: получилось и нужно
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const y0 = H / 2, sc = (H / 2 - 24) / 3, cw = W / 3;
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(10, y0); g.lineTo(W - 10, y0); g.stroke();
+  g.font = '11px system-ui'; g.fillStyle = '#6b6b70'; g.textAlign = 'left';
+  for (const v of [-3, -2, -1, 1, 2, 3]) { g.fillText(v, 12, y0 - v * sc + 4); g.strokeStyle = '#f0f0ea'; g.beginPath(); g.moveTo(26, y0 - v * sc); g.lineTo(W - 10, y0 - v * sc); g.stroke(); }
+  ['M — масса', 'L — длина', 'T — время'].forEach((name, k) => {
+    const cx = cw * k + cw / 2;
+    const bar = (x, v, col) => { const h = Math.max(-3.2, Math.min(3.2, v)) * sc; g.fillStyle = col; g.fillRect(x, h >= 0 ? y0 - h : y0, 26, Math.abs(h)); };
+    bar(cx - 30, tgt[k], '#cfd6e2'); bar(cx + 4, d[k], match[k] ? '#16a34a' : '#dc2626');
+    g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'center'; g.fillText(name, cx, H - 6);
+    g.font = '11px system-ui'; g.fillStyle = '#6b6b70'; g.fillText('нужно', cx - 17, 14); g.fillText('есть', cx + 17, 14);
+  });
+
+  $('read').innerHTML = ro('нужна размерность', `${M.target[1]}: ${dimStr(tgt)}`) + ro('получилось', dimStr(d), match.every(Boolean) ? 'ok' : 'no') +
+    ro('совпало оснований', match.filter(Boolean).length + ' из 3');
+}
+
+$('mode').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('mode').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); mode = b.dataset.m; setup(); draw();
+});
+$('solve').onclick = () => { MODES[mode].sol.forEach((v, i) => $('s' + i).querySelector('input').value = v); draw(); };
+$('zero').onclick = () => { setup(); draw(); };
+document.querySelectorAll('input[type=range]').forEach(i => i.oninput = draw);
+window.onresize = draw;
+setup(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

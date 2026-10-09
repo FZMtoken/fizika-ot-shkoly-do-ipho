@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калориметр</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Калориметр</h1>
+  <p class="lead">Горячий брусок опускают в холодную воду в теплоизолированном сосуде. Нажми «Пуск» — температуры сблизятся и сравняются. Справа график температур от времени. Теплоёмкость сосуда не учитываем.</p>
+
+  <div class="card">
+    <div class="seg" id="mat"></div>
+    <div class="controls">
+      <label><i>Масса бруска</i><span id="m1o"></span><input id="m1" type="range" min="50" max="1000" step="10" value="500"></label>
+      <label><i>Температура бруска</i><span id="t1o"></span><input id="t1" type="range" min="20" max="100" step="1" value="100"></label>
+      <label><i>Масса воды</i><span id="m2o"></span><input id="m2" type="range" min="100" max="1000" step="10" value="200"></label>
+      <label><i>Температура воды</i><span id="t2o"></span><input id="t2" type="range" min="0" max="50" step="1" value="20"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сначала</button><button id="def">Исходные значения</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Опусти алюминиевый брусок 500 г при 100 °C в 200 г воды при 20 °C. Какая установится температура? Какое тело изменило температуру сильнее?</li>
+      <li>Замени алюминий свинцом той же массы. Во сколько раз меньше нагрелась вода?</li>
+      <li>Выбери «горячая вода»: при равных массах общая температура — ровно среднее. Проверь.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const MAT = [['алюминий', 920, '#94a3b8'], ['железо', 460, '#64748b'], ['медь', 400, '#c2703d'], ['свинец', 140, '#475569'], ['горячая вода', 4200, '#60a5fa']];
+const CW = 4200, TAU = 1.5, TEND = 10;
+let mi = 0, t = 0, running = false, last = null;
+
+$('mat').innerHTML = MAT.map((m, i) => `<button data-i="${i}">${m[0]}</button>`).join('');
+const segUpd = () => $('mat').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.i === mi));
+$('mat').querySelectorAll('button').forEach(b => b.onclick = () => { mi = +b.dataset.i; segUpd(); t = 0; draw(); });
+
+function par() {
+  const m1 = +$('m1').value / 1000, t1 = +$('t1').value, m2 = +$('m2').value / 1000, t2 = +$('t2').value, c1 = MAT[mi][1];
+  const tf = (c1 * m1 * t1 + CW * m2 * t2) / (c1 * m1 + CW * m2), e = Math.exp(-t / TAU);
+  return { m1, t1, m2, t2, c1, tf, tb: tf + (t1 - tf) * e, tw: tf + (t2 - tf) * e };
+}
+const heat = T => { const q = Math.max(0, Math.min(1, T / 100)); return `rgb(${Math.round(59 + 161 * q)},${Math.round(130 - 92 * q)},${Math.round(246 - 208 * q)})`; };
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const p = par(), lw = Math.min(260, W * 0.36), bx = 20, by = 40, bw = lw - 40, bh = H - 70;
+  // сосуд с водой
+  const lvl = by + bh * (1 - 0.35 - 0.6 * p.m2);
+  g.fillStyle = heat(p.tw); g.globalAlpha = 0.35; g.fillRect(bx, lvl, bw, by + bh - lvl); g.globalAlpha = 1;
+  g.strokeStyle = '#334155'; g.lineWidth = 3; g.beginPath(); g.moveTo(bx, by - 10); g.lineTo(bx, by + bh); g.lineTo(bx + bw, by + bh); g.lineTo(bx + bw, by - 10); g.stroke();
+  // брусок: опущен в воду, когда идёт теплообмен
+  const sz = 30 + 40 * Math.cbrt(p.m1), inWater = t > 0 || running, yb = inWater ? by + bh - sz - 6 : by - sz - 14;
+  if (mi === 4) { g.fillStyle = heat(p.tb); g.globalAlpha = 0.6; g.beginPath(); g.ellipse(bx + bw / 2, yb + sz / 2, sz * 0.6, sz / 2, 0, 0, 7); g.fill(); g.globalAlpha = 1; }
+  else { g.fillStyle = MAT[mi][2]; g.fillRect(bx + bw / 2 - sz / 2, yb, sz, sz); g.strokeStyle = heat(p.tb); g.lineWidth = 4; g.strokeRect(bx + bw / 2 - sz / 2, yb, sz, sz); }
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'center';
+  g.fillText(fmt(p.tb, 1) + ' °C', bx + bw / 2, yb - 6); g.fillText('вода ' + fmt(p.tw, 1) + ' °C', bx + bw / 2, by + bh + 18);
+  // график
+  const gx = lw + 40, gw = W - gx - 14, gy = 26, gh = H - 60, X = s => gx + gw * s / TEND, Y = T => gy + gh - gh * T / 100;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'right';
+  for (let T = 0; T <= 100; T += 20) g.fillText(T, gx - 4, Y(T) + 4);
+  g.fillText('время', gx + gw, gy + gh + 14); g.textAlign = 'left'; g.fillText('t, °C', gx - 30, gy - 12);
+  g.setLineDash([4, 4]); g.strokeStyle = '#16a34a'; g.beginPath(); g.moveTo(gx, Y(p.tf)); g.lineTo(gx + gw, Y(p.tf)); g.stroke(); g.setLineDash([]);
+  const line = (T0, col) => { g.strokeStyle = col; g.lineWidth = 2.5; g.beginPath();
+    for (let s = 0; s <= t + 1e-9; s += 0.05) { const T = p.tf + (T0 - p.tf) * Math.exp(-s / TAU); s ? g.lineTo(X(s), Y(T)) : g.moveTo(X(s), Y(T)); } g.stroke(); };
+  line(p.t1, '#dc2626'); line(p.t2, '#2563eb');
+  g.font = '12px system-ui'; const gapY = p.tb - p.tw < 8 ? 9 : 0;     // подписи у концов кривых, раздвинуты при сближении
+  const late = t > TEND * 0.75, lx = late ? X(t) - 6 : X(t) + 6; g.textAlign = late ? 'right' : 'left';
+  g.fillStyle = '#dc2626'; g.fillText('брусок', lx, Y(p.tb) - 4 - gapY); g.fillStyle = '#2563eb'; g.fillText('вода', lx, Y(p.tw) + 12 + gapY);
+  $('m1o').textContent = $('m1').value + ' г'; $('t1o').textContent = $('t1').value + ' °C'; $('m2o').textContent = $('m2').value + ' г'; $('t2o').textContent = $('t2').value + ' °C';
+  const qb = p.c1 * p.m1 * (p.t1 - p.tb), qw = CW * p.m2 * (p.tw - p.t2);
+  $('read').innerHTML = ro('температура бруска', fmt(p.tb, 1) + ' °C') + ro('температура воды', fmt(p.tw, 1) + ' °C') + ro('общая (итог)', fmt(p.tf, 1) + ' °C') +
+    ro('брусок отдал', fmt(qb / 1000, 2) + ' кДж') + ro('вода получила', fmt(qw / 1000, 2) + ' кДж');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; t = Math.min(TEND, t + dt); draw();
+  if (t >= TEND) { running = false; $('play').textContent = '▶ Пуск'; return; } requestAnimationFrame(tick); }
+$('play').onclick = () => { if (!running && t >= TEND) t = 0; running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; t = 0; draw(); };
+$('def').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; t = 0; mi = 0; segUpd(); $('m1').value = 500; $('t1').value = 100; $('m2').value = 200; $('t2').value = 20; draw(); };
+['m1', 't1', 'm2', 't2'].forEach(id => $(id).oninput = () => { t = 0; draw(); });
+window.onresize = draw;
+segUpd(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

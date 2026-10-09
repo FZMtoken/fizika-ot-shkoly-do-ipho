@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Притяжение двух тел</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .c1 { color:#2563eb; } .c2 { color:#16a34a; } .cf { color:#dc2626; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Притяжение двух тел</h1>
+  <p class="lead">Выбери пару тел и меняй массы и расстояние. <b class="cf">Красные стрелки</b> — силы притяжения, действующие на каждое тело.
+    Внизу — график силы от расстояния: закон обратных квадратов.</p>
+
+  <div class="card">
+    <div class="seg" id="scene">
+      <button data-s="0" class="on">Два шара</button><button data-s="1">Два человека</button><button data-s="2">Корабли</button><button data-s="3">Земля и Луна</button>
+    </div>
+    <div class="controls">
+      <label class="c1">Масса m₁:<span id="m1o"></span><input id="m1" type="range" min="-2" max="2" step="1" value="0"></label>
+      <label class="c2">Масса m₂:<span id="m2o"></span><input id="m2" type="range" min="-2" max="2" step="1" value="0"></label>
+      <label>Расстояние между центрами r:<span id="ro"></span><input id="r" type="range" min="1" max="4" step="0.25" value="1"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="200"></canvas>
+    <canvas id="g" height="200"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Увеличь массу одного тела вдвое. Как изменились силы, действующие на каждое тело? А ускорения?</li>
+      <li>Увеличь расстояние в 2 раза, потом в 3 раза. Во сколько раз уменьшилась сила?</li>
+      <li>Сравни силу притяжения двух людей с весом пылинки массой 0,03 мг.</li>
+      <li>В паре «Земля и Луна» сравни ускорения. Почему Луна обращается вокруг Земли, а не наоборот?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const GC = 6.67e-11;
+const SCENES = [
+  { m1: 1, m2: 1, r: 0.1, u: 'м', n1: 'шар 1', n2: 'шар 2', g1: 'шара 1', g2: 'шара 2' },
+  { m1: 70, m2: 70, r: 1, u: 'м', n1: 'человек 1', n2: 'человек 2', g1: 'человека 1', g2: 'человека 2' },
+  { m1: 5e7, m2: 5e7, r: 1000, u: 'м', n1: 'корабль 1', n2: 'корабль 2', g1: 'корабля 1', g2: 'корабля 2' },
+  { m1: 6e24, m2: 7.35e22, r: 3.84e8, u: 'м', n1: 'Земля', n2: 'Луна', g1: 'Земли', g2: 'Луны' },
+];
+let sc = 0;
+const sup = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+function sci(x, p = 3) {                   // 3 значащие цифры, степень десяти
+  if (x === 0) return '0'; const e = Math.floor(Math.log10(Math.abs(x)));
+  if (e >= -2 && e <= 4) return (+x.toPrecision(p)).toString().replace('.', ',');
+  const m = (x / 10 ** e).toPrecision(p).replace('.', ',');
+  return m + '·10' + String(e).split('').map(ch => sup[ch]).join('');
+}
+function P() {
+  const s = SCENES[sc], k1 = 2 ** +$('m1').value, k2 = 2 ** +$('m2').value, kr = +$('r').value;
+  const m1 = s.m1 * k1, m2 = s.m2 * k2, r = s.r * kr, F = GC * m1 * m2 / (r * r);
+  return { s, k1, k2, kr, m1, m2, r, F, F0: GC * s.m1 * s.m2 / (s.r * s.r) };
+}
+function setup(c) { const r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px'; const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, W, H]; }
+function arrow(g, x, y, dx, col) {
+  const s = Math.sign(dx); g.strokeStyle = g.fillStyle = col; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx - s * 9, y); g.stroke();
+  g.beginPath(); g.moveTo(x + dx, y); g.lineTo(x + dx - s * 13, y - 6); g.lineTo(x + dx - s * 13, y + 6); g.fill();
+}
+function draw() {
+  const p = P();
+  { const [g, W, H] = setup($('c')), cy = H / 2 - 6, L = 60, span = (W - 2 * L) / 4;
+    const x1 = L, x2 = L + span * p.kr, R1 = 14 * Math.cbrt(p.k1), R2 = 14 * Math.cbrt(p.k2) * (sc === 3 ? 0.6 : 1);
+    g.strokeStyle = '#94a3b8'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(x1, cy + 40); g.lineTo(x2, cy + 40); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#6b6b70'; g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText('r = ' + sci(p.r) + ' м', (x1 + x2) / 2, cy + 56);
+    g.fillStyle = '#2563eb'; g.beginPath(); g.arc(x1, cy, R1, 0, 7); g.fill();
+    g.fillStyle = '#16a34a'; g.beginPath(); g.arc(x2, cy, R2, 0, 7); g.fill();
+    const A = Math.min(span * 0.8, 30 + 40 * Math.sqrt(p.F / p.F0));   // длина стрелки растёт с силой
+    arrow(g, x1 + R1, cy, A, '#dc2626'); arrow(g, x2 - R2, cy, -A, '#dc2626');
+    g.fillStyle = '#1d1d1f'; g.font = '600 12px system-ui'; g.fillText(p.s.n1, x1, cy - R1 - 18); g.fillText(p.s.n2, x2, cy - R2 - 18);
+    g.fillStyle = '#dc2626'; g.font = '12px system-ui'; g.fillText('F', x1 + R1 + A / 2, cy - 8); g.fillText('F', x2 - R2 - A / 2, cy - 8);
+  }
+  { const [g, W, H] = setup($('g')), L = 50, R = 12, Tp = 22, B = 28, sx = k => L + (k - 1) / 3 * (W - L - R) * 0.95, sy = f => H - B - f * (H - Tp - B);
+    g.strokeStyle = '#ecece6'; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'right';
+    for (let f = 0; f <= 1; f += 0.25) { g.beginPath(); g.moveTo(L, sy(f)); g.lineTo(W - R, sy(f)); g.stroke(); g.fillText(f.toString().replace('.', ','), L - 4, sy(f) + 4); }
+    g.textAlign = 'center'; for (let k = 1; k <= 4; k++) g.fillText(k + ' r₀', sx(k), H - 10);
+    g.strokeStyle = '#dc2626'; g.lineWidth = 2.5; g.beginPath();
+    for (let k = 1; k <= 4.001; k += 0.02) { k === 1 ? g.moveTo(sx(k), sy(1 / (k * k))) : g.lineTo(sx(k), sy(1 / (k * k))); } g.stroke();
+    g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(sx(p.kr), sy(1 / (p.kr * p.kr)), 5, 0, 7); g.fill();
+    g.font = '600 13px system-ui'; g.textAlign = 'left'; g.fillText('F / F(r₀) при тех же массах', L, 14);
+  }
+  $('m1o').textContent = sci(p.m1) + ' кг'; $('m2o').textContent = sci(p.m2) + ' кг'; $('ro').textContent = sci(p.r) + ' м (' + p.kr.toString().replace('.', ',') + ' r₀)';
+  $('read').innerHTML = ro('сила F', sci(p.F) + ' Н', 'cf') + ro('ускорение ' + p.s.g1, sci(p.F / p.m1) + ' м/с²', 'c1') +
+    ro('ускорение ' + p.s.g2, sci(p.F / p.m2) + ' м/с²', 'c2') + ro('сила по сравнению с r₀', '× ' + sci(1 / (p.kr * p.kr))) +
+    ro('a₂ / a₁', sci(p.m1 / p.m2));
+}
+$('scene').querySelectorAll('button').forEach(b => b.onclick = () => {
+  $('scene').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); sc = +b.dataset.s;
+  ['m1', 'm2'].forEach(id => $(id).value = 0); $('r').value = 1; draw(); });
+['m1', 'm2', 'r'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

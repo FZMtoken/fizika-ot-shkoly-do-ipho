@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Влажный воздух под поршнем</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Влажный воздух под поршнем</h1>
+  <p class="lead">В цилиндре 10 л влажного воздуха при давлении 100 кПа. Поршень медленно сжимает его при постоянной температуре. Справа — давление водяного пара от объёма: сначала растёт как у обычного газа, а после насыщения остаётся постоянным, и на стенках выпадает вода.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Температура t</i><span id="to"></span><input id="t" type="range" min="10" max="60" step="1" value="20"></label>
+      <label><i>Начальная влажность φ</i><span id="fo"></span><input id="f" type="range" min="10" max="100" step="1" value="50"></label>
+      <label><i>Объём V</i><span id="Vo"></span><input id="V" type="range" min="1" max="10" step="0.1" value="10"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>При 20 °C и влажности 50 % сжимай воздух. При каком объёме пар стал насыщенным?</li>
+      <li>Сожми до 2 л. Сравни давления и массу воды с примером 2.</li>
+      <li>Подними температуру до 60 °C. Почему вода начинает выпадать при том же объёме, а сконденсировавшейся воды больше?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const V0 = 10, P0 = 100;                                          // л, кПа
+const pS = t => 0.6112 * Math.exp(17.62 * t / (243.12 + t));      // кПа, формула Магнуса
+const rhoS = t => pS(t) * 1000 * 0.018 / (8.31 * (t + 273.15)) * 1000;   // г/м³
+let tt = 0, running = false, last = null;
+
+function st(V) {
+  const t = +$('t').value, f = +$('f').value / 100, ps = pS(t), pv0 = f * ps, pa0 = P0 - pv0;
+  const pv = Math.min(pv0 * V0 / V, ps), pa = pa0 * V0 / V, cond = Math.max(0, f * rhoS(t) * V0 - rhoS(t) * V);   // мг: г/м³ · л = мг
+  return { t, f, ps, pv0, pv, pa, cond, Vsat: f * V0 };
+}
+const curV = () => running ? 5.5 + 4.5 * Math.cos(tt * 0.5) : +$('V').value;
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const V = curV(), s = st(V);
+  // цилиндр
+  const cw = Math.min(150, W * 0.22), cx = 20, cy = 20, ch = H - 50, top = cy + ch * (1 - V / V0);
+  g.fillStyle = s.pv >= s.ps - 1e-9 ? 'rgba(148,163,184,.35)' : 'rgba(191,219,254,.5)'; g.fillRect(cx, top, cw, cy + ch - top);
+  g.strokeStyle = '#334155'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy - 10); g.lineTo(cx, cy + ch); g.lineTo(cx + cw, cy + ch); g.lineTo(cx + cw, cy - 10); g.stroke();
+  g.fillStyle = '#64748b'; g.fillRect(cx + 2, top - 10, cw - 4, 10); g.fillRect(cx + cw / 2 - 4, Math.max(0, top - 40), 8, 30);
+  if (s.cond > 0) { const n = Math.min(40, Math.round(s.cond / 3) + 2); g.fillStyle = '#2563eb';
+    for (let i = 0; i < n; i++) { const side = i % 2, y = cy + ch - 6 - ((i * 37) % Math.max(10, cy + ch - top - 12)); g.beginPath(); g.arc(side ? cx + cw - 5 : cx + 5, y, 2.5, 0, 7); g.fill(); }
+    g.fillRect(cx + 1, cy + ch - Math.min(8, 1 + s.cond / 20), cw - 2, Math.min(8, 1 + s.cond / 20)); }
+  g.fillStyle = '#1d1d1f'; g.font = '12px system-ui'; g.textAlign = 'center'; g.fillText(fmt(V, 1) + ' л', cx + cw / 2, cy + ch + 18);
+  // график давления пара
+  const gx = cx + cw + 60, gw = W - gx - 14, gy = 16, gh = H - 50, PM = s.ps * 1.3, X = v => gx + gw * v / V0, Y = p => gy + gh - gh * p / PM;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'center'; for (let v = 2; v <= 10; v += 2) g.fillText(v, X(v), gy + gh + 14);
+  g.textAlign = 'right'; g.fillText('V, л', gx + gw, gy + gh + 28); g.fillText(fmt(s.ps, 2), gx - 4, Y(s.ps) + 4); g.fillText('0', gx - 4, gy + gh + 4);
+  g.textAlign = 'left'; g.fillText('давление пара, кПа', gx + 4, gy + 10);
+  g.setLineDash([5, 4]); g.strokeStyle = '#94a3b8'; g.beginPath(); g.moveTo(gx, Y(s.ps)); g.lineTo(gx + gw, Y(s.ps)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#64748b'; g.fillText('насыщение', gx + gw - 70, Y(s.ps) - 6);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath(); for (let v = 1; v <= V0 + 1e-9; v += 0.05) { const p = st(v).pv; v === 1 ? g.moveTo(X(v), Y(p)) : g.lineTo(X(v), Y(p)); } g.stroke();
+  if (s.Vsat >= 1) { g.strokeStyle = '#94a3b8'; g.lineWidth = 1; g.beginPath(); g.moveTo(X(s.Vsat), Y(s.ps)); g.lineTo(X(s.Vsat), gy + gh); g.stroke();
+    g.fillStyle = '#334155'; g.textAlign = 'center'; g.fillText(fmt(s.Vsat, 1) + ' л', X(s.Vsat), gy + gh - 6); }
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(X(V), Y(s.pv), 6, 0, 7); g.fill();
+  $('to').textContent = s.t + ' °C'; $('fo').textContent = Math.round(s.f * 100) + ' %'; $('Vo').textContent = fmt(V, 1) + ' л';
+  $('read').innerHTML = ro('давление воздуха', fmt(s.pa, 1) + ' кПа') + ro('давление пара', fmt(s.pv, 2) + ' кПа') + ro('общее давление', fmt(s.pa + s.pv, 1) + ' кПа') +
+    ro('пар насыщен при', fmt(s.Vsat, 1) + ' л') + ro('выпало воды', fmt(s.cond, 1) + ' мг');
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts; tt += dt; draw(); requestAnimationFrame(tick); }
+$('play').onclick = () => { if (running) $('V').value = Math.round(curV() * 10) / 10; running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) { tt = 0; requestAnimationFrame(tick); } else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('t').value = 20; $('f').value = 50; $('V').value = 10; draw(); };
+['t', 'f', 'V'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

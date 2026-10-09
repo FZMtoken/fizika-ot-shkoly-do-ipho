@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Гонка по склону</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; white-space:nowrap; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-variant-numeric:tabular-nums; table-layout:fixed; }
+  th, td { text-align:left; padding:4px 6px; border-bottom:1px solid #eee; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  th { color:var(--muted); font-weight:400; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Гонка по склону</h1>
+  <p class="lead">С одной высоты по одинаковым склонам длиной 2 м одновременно отпускают кольцо, сплошной цилиндр, шар и шайбу, которая скользит без трения и не вращается. Метка на телах показывает вращение.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Угол склона α</i><span id="alo"></span><input id="al" type="range" min="5" max="45" step="1" value="20"></label>
+      <label><i>Коэффициент трения тел о склон μ</i><span id="muo"></span><input id="mu" type="range" min="0" max="0.6" step="0.01" value="0.4"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Старт</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="500"></canvas>
+    <table><thead><tr><th>тело</th><th>k = I/(mR²)</th><th>ускорение</th><th>время</th><th>движение</th></tr></thead><tbody id="tb"></tbody></table>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Запусти гонку. В каком порядке тела приходят к финишу? Совпадает ли с таблицей урока?</li>
+      <li>Измени угол наклона. Меняется ли порядок? А отношение времён кольца и цилиндра?</li>
+      <li>Уменьшай трение. Какое тело первым начинает проскальзывать? Что происходит при μ = 0?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const G = 10, LEN = 2, D = Math.PI / 180;
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const BODIES = [
+  { name: 'кольцо', k: 1, col: '#2563eb' }, { name: 'цилиндр', k: 0.5, col: '#16a34a' },
+  { name: 'шар', k: 0.4, col: '#dc2626' }, { name: 'шайба без трения', k: 0, col: '#6b6b70', slide: true }];
+let t = 0, running = false, last = null;
+
+function motion(b) {                       // ускорение центра и угловое ускорение (в единицах 1/R)
+  const al = +$('al').value * D, mu = +$('mu').value, s = Math.sin(al), c = Math.cos(al);
+  if (b.slide) return { a: G * s, e: 0, slip: false };
+  const aRoll = G * s / (1 + b.k), need = G * s * b.k / (1 + b.k);       // нужная сила трения на единицу массы
+  if (need <= mu * G * c + 1e-12) return { a: aRoll, e: aRoll, slip: false };
+  return { a: G * (s - mu * c), e: mu * G * c / b.k, slip: true };       // качение с проскальзыванием
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const al = +$('al').value * D, lane = H / 4, Lp = Math.min(W - 190, (lane - 34) / Math.max(Math.sin(al), 0.15)), R = 11;
+  const dx = Lp * Math.cos(al), dy = Lp * Math.sin(al), sc = Lp / LEN;
+  BODIES.forEach((b, i) => {
+    const x0 = 20, yb = (i + 1) * lane - 6, M = motion(b), tt = Math.min(t, Math.sqrt(2 * LEN / M.a)), s = M.a * tt * tt / 2, ph = M.e * tt * tt / 2 / 0.11;
+    // склон: верх слева, низ справа
+    g.strokeStyle = '#c8a96a'; g.lineWidth = 4; g.beginPath(); g.moveTo(x0, yb - dy); g.lineTo(x0 + dx, yb); g.stroke();
+    g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x0 + dx, yb - 18); g.lineTo(x0 + dx, yb + 4); g.stroke(); g.setLineDash([]);
+    const ux = Math.cos(al), uy = Math.sin(al), nx = Math.sin(al), ny = -Math.cos(al);
+    const px = x0 + s * sc * ux + nx * (R + 2), py = yb - dy + s * sc * uy + ny * (R + 2);
+    if (b.slide) { g.save(); g.translate(px, py); g.rotate(al); g.fillStyle = b.col; g.fillRect(-R, -R, 2 * R, 2 * R); g.restore(); }
+    else {
+      g.lineWidth = b.k === 1 ? 4 : 2; g.strokeStyle = b.col; g.fillStyle = b.k === 1 ? '#fff' : b.col + '55';
+      g.beginPath(); g.arc(px, py, R, 0, 7); g.fill(); g.stroke();
+      g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.beginPath(); g.moveTo(px, py); g.lineTo(px + R * Math.cos(ph), py + R * Math.sin(ph)); g.stroke();
+    }
+    g.fillStyle = b.col; g.font = '600 12px system-ui'; g.textAlign = 'left'; g.fillText(b.name, x0 + dx + 10, yb - 4); if (M.slip) { g.font = '11px system-ui'; g.fillText('проскальзывает', x0 + dx + 10, yb + 10); }
+  });
+  $('alo').textContent = $('al').value + '°'; $('muo').textContent = fmt(+$('mu').value);
+  $('tb').innerHTML = BODIES.map(b => { const M = motion(b), T = Math.sqrt(2 * LEN / M.a), fin = t >= T;
+    return `<tr><td style="color:${b.col}">${b.name}</td><td>${b.slide ? '—' : fmt(b.k, 1)}</td><td>${fmt(M.a)} м/с²</td><td>${fin ? fmt(T) + ' с' : '…'}</td><td>${b.slide ? 'скольжение' : M.slip ? 'с проскальзыванием' : 'качение'}</td></tr>`; }).join('');
+}
+
+function tick(ts) {
+  if (!running) return;
+  const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  t += dt * 0.5; draw();                                     // замедление вдвое
+  const tMax = Math.max(...BODIES.map(b => Math.sqrt(2 * LEN / motion(b).a)));
+  if (t >= tMax) { running = false; $('play').textContent = '▶ Старт'; return; }
+  requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (running) { running = false; $('play').textContent = '▶ Старт'; return; }
+  t = 0; running = true; last = null; $('play').textContent = '⏸ Пауза'; requestAnimationFrame(tick); };
+const reset = () => { running = false; t = 0; $('play').textContent = '▶ Старт'; draw(); };
+$('reset').onclick = () => { $('al').value = 20; $('mu').value = 0.4; reset(); };
+['al', 'mu'].forEach(id => $(id).oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>График нагревания льда</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>График нагревания льда</h1>
+  <p class="lead">Лёд нагревают нагревателем постоянной мощности, пока вся вода не выкипит. Потерь теплоты нет. Слева — сосуд, справа — температура от времени. Ползунок «Время» позволяет пройти процесс вручную, «Пуск» — анимация за 20 секунд.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label><i>Масса льда</i><span id="mo"></span><input id="m" type="range" min="0.2" max="2" step="0.1" value="1"></label>
+      <label><i>Начальная температура льда</i><span id="t0o"></span><input id="t0" type="range" min="-40" max="0" step="1" value="-20"></label>
+      <label><i>Мощность нагревателя</i><span id="Po"></span><input id="P" type="range" min="500" max="3000" step="100" value="1000"></label>
+      <label><i>Время</i><span id="so"></span><input id="s" type="range" min="0" max="1000" step="1" value="0"></label>
+    </div>
+    <div class="row"><button class="primary" id="play">▶ Пуск</button><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="300"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Найди на графике горизонтальные участки. Что происходит с веществом на каждом из них?</li>
+      <li>Сравни длительность плавления и кипения. Во сколько раз кипение дольше? Сравни с отношением 2,3·10⁶ / 3,3·10⁵.</li>
+      <li>Почему участок нагрева льда круче, чем участок нагрева воды?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const CI = 2100, CW = 4200, LAM = 3.3e5, LV = 2.3e6;
+let running = false, last = null, sv = 0;                     // sv — положение ползунка времени, 0…1000
+
+function stages() {
+  const m = +$('m').value, t0 = +$('t0').value, P = +$('P').value;
+  const Q = [CI * m * (0 - t0), LAM * m, CW * m * 100, LV * m], cum = [0];
+  Q.forEach(q => cum.push(cum[cum.length - 1] + q));
+  return { m, t0, P, Q, cum, tEnd: cum[4] / P };
+}
+function stateAt(st, q) {                                         // температура, этап и доля по подведённой теплоте
+  const { m, t0, cum } = st;
+  if (q <= cum[1]) return { T: t0 + q / (CI * m), k: 0, f: 0 };
+  if (q <= cum[2]) return { T: 0, k: 1, f: (q - cum[1]) / (cum[2] - cum[1]) };
+  if (q <= cum[3]) return { T: (q - cum[2]) / (CW * m), k: 2, f: 1 };
+  return { T: 100, k: 3, f: Math.min(1, (q - cum[3]) / (cum[4] - cum[3])) };
+}
+const NAMES = ['нагревается лёд', 'плавится', 'нагревается вода', 'кипит'];
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const st = stages(), time = st.tEnd * sv / 1000, cur = stateAt(st, st.P * time);
+  // сосуд
+  const bw = Math.min(170, W * 0.24), bx = 14, by = 40, bh = H - 80, lvl = by + bh * (1 - 0.25 - 0.5 * st.m / 2);
+  const left = cur.k === 3 ? 1 - cur.f : 1, top = by + bh - (by + bh - lvl) * left;
+  if (cur.k <= 1) { const iceH = (by + bh - lvl) * (1 - cur.f), wH = (by + bh - lvl) * cur.f * 0.92;
+    g.fillStyle = 'rgba(96,165,250,.45)'; g.fillRect(bx, by + bh - wH, bw, wH);
+    g.fillStyle = '#e0f2fe'; g.strokeStyle = '#7dd3fc'; g.lineWidth = 1;
+    const n = 6, cs = Math.min(bw / 3.4, iceH / 1.6 + 6); for (let i = 0; i < n * (1 - cur.f * 0.9); i++) { const x = bx + 8 + (i % 3) * (cs + 6), y = by + bh - wH - cs - Math.floor(i / 3) * (cs + 4) + (cur.f > 0 ? cs * 0.5 : 0); g.fillRect(x, y, cs, cs); g.strokeRect(x, y, cs, cs); }
+  } else { g.fillStyle = 'rgba(96,165,250,.55)'; g.fillRect(bx, top, bw, by + bh - top);
+    if (cur.k === 3 && cur.f < 1) { g.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < 8; i++) { g.beginPath(); g.arc(bx + 12 + (i * 37) % (bw - 20), top + 8 + (i * 23 + Math.floor(time)) % Math.max(10, by + bh - top - 12), 3, 0, 7); g.fill(); } } }
+  g.strokeStyle = '#334155'; g.lineWidth = 3; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx, by + bh); g.lineTo(bx + bw, by + bh); g.lineTo(bx + bw, by); g.stroke();
+  g.fillStyle = '#f97316'; g.fillRect(bx - 4, by + bh + 6, bw + 8, 8);
+  g.fillStyle = '#1d1d1f'; g.font = '13px system-ui'; g.textAlign = 'center'; g.fillText(NAMES[cur.k], bx + bw / 2, by - 14);
+  // график
+  const gx = bx + bw + 56, gw = W - gx - 14, gy = 24, gh = H - 60, TMIN = Math.min(-40, st.t0), X = s => gx + gw * s / st.tEnd, Y = T => gy + gh - gh * (T - TMIN) / (110 - TMIN);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1; g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx, gy + gh); g.lineTo(gx + gw, gy + gh); g.stroke();
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'right';
+  [-40, -20, 0, 20, 40, 60, 80, 100].forEach(T => { g.fillText(T, gx - 4, Y(T) + 4); });
+  g.strokeStyle = '#e2e8f0'; [0, 100].forEach(T => { g.beginPath(); g.moveTo(gx, Y(T)); g.lineTo(gx + gw, Y(T)); g.stroke(); });
+  const stepMin = st.tEnd / 60 > 40 ? 10 : 5; g.textAlign = 'center';
+  for (let mn = stepMin; mn * 60 < st.tEnd; mn += stepMin) g.fillText(mn, X(mn * 60), gy + gh + 14);
+  g.textAlign = 'right'; g.fillText('время, мин', gx + gw, gy + gh + 30); g.textAlign = 'left'; g.fillText('t, °C', gx - 34, gy - 10);
+  const COL = ['#38bdf8', '#a855f7', '#2563eb', '#dc2626'];
+  for (let k = 0; k < 4; k++) { const a = st.cum[k] / st.P, b = st.cum[k + 1] / st.P, T1 = stateAt(st, st.cum[k] + 1e-6).T, T2 = stateAt(st, st.cum[k + 1]).T;
+    g.strokeStyle = COL[k]; g.lineWidth = 2; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(X(a), Y(T1)); g.lineTo(X(b), Y(T2)); g.stroke(); g.setLineDash([]);
+    if (time > a) { const e = Math.min(time, b), Te = stateAt(st, e * st.P).T; g.lineWidth = 3.5; g.beginPath(); g.moveTo(X(a), Y(T1)); g.lineTo(X(e), Y(Te)); g.stroke(); } }
+  g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(X(time), Y(cur.T), 6, 0, 7); g.fill();
+  $('mo').textContent = fmt(st.m, 1) + ' кг'; $('t0o').textContent = fmt(st.t0, 0) + ' °C'; $('Po').textContent = st.P + ' Вт'; $('so').textContent = fmt(time / 60, 1) + ' мин';
+  const extra = cur.k === 1 ? 'растаяло ' + fmt(100 * cur.f, 0) + ' %' : cur.k === 3 ? 'выкипело ' + fmt(100 * cur.f, 0) + ' %' : cur.k === 0 ? 'лёд целый' : 'весь лёд растаял';
+  $('read').innerHTML = ro('время', fmt(time / 60, 1) + ' мин') + ro('температура', fmt(cur.T, 1) + ' °C') + ro('что происходит', NAMES[cur.k]) +
+    ro('подведено теплоты', fmt(st.P * time / 1000, 0) + ' кДж') + ro('состояние', extra);
+}
+
+function tick(ts) { if (!running) { last = null; return; } const dt = last === null ? 0 : Math.min(0.05, (ts - last) / 1000); last = ts;
+  sv += dt * 50; if (sv >= 1000) { sv = 1000; running = false; $('play').textContent = '▶ Пуск'; } $('s').value = sv; draw(); if (running) requestAnimationFrame(tick); }
+$('play').onclick = () => { if (!running && sv >= 1000) sv = 0; running = !running; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); else draw(); };
+$('reset').onclick = () => { running = false; $('play').textContent = '▶ Пуск'; $('m').value = 1; $('t0').value = -20; $('P').value = 1000; $('s').value = 0; sv = 0; draw(); };
+['m', 't0', 'P'].forEach(id => $(id).oninput = draw);
+$('s').oninput = () => { sv = +$('s').value; draw(); };
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

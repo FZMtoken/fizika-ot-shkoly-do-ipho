@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Шайба на воздушном столе</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  .f1 { color:#2563eb; } .f2 { color:#16a34a; } .fr { color:#dc2626; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  #play { min-width: 7.2em; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Шайба на воздушном столе</h1>
+  <p class="lead">Трения нет. На шайбу действуют две горизонтальные силы. Шайба стартует из покоя в центре стола. Вид сверху.</p>
+
+  <div class="card">
+    <div class="controls">
+      <label class="f1">Сила F₁:<span id="f1o"></span><input id="f1" type="range" min="0" max="10" step="0.5" value="4"></label>
+      <label class="f1">Направление F₁:<span id="a1o"></span><input id="a1" type="range" min="0" max="360" step="5" value="0"></label>
+      <label class="f2">Сила F₂:<span id="f2o"></span><input id="f2" type="range" min="0" max="10" step="0.5" value="3"></label>
+      <label class="f2">Направление F₂:<span id="a2o"></span><input id="a2" type="range" min="0" max="360" step="5" value="90"></label>
+      <label>Масса шайбы m:<span id="mo"></span><input id="m" type="range" min="0.5" max="5" step="0.5" value="1"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="play">▶ Пуск</button>
+      <button id="reset">Сброс</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Оставь одну силу. Куда движется шайба? Как ускорение зависит от массы?</li>
+      <li>Задай две силы под углом. Проверь, что шайба разгоняется по направлению красной стрелки — равнодействующей.</li>
+      <li>Подбери силы так, чтобы шайба не разгонялась. Чему равна равнодействующая?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let t = 0, running = false, last = null, trail = [];
+const F = () => {
+  const f1 = +$('f1').value, a1 = +$('a1').value * Math.PI / 180, f2 = +$('f2').value, a2 = +$('a2').value * Math.PI / 180;
+  const v1 = [f1 * Math.cos(a1), f1 * Math.sin(a1)], v2 = [f2 * Math.cos(a2), f2 * Math.sin(a2)];
+  return { v1, v2, R: [v1[0] + v2[0], v1[1] + v2[1]], m: +$('m').value };
+};
+const posAt = tt => { const { R, m } = F(); return [R[0] / m * tt * tt / 2, R[1] / m * tt * tt / 2]; };
+
+function arrow(g, x1, y1, x2, y2, col, lab) {
+  const L = Math.hypot(x2 - x1, y2 - y1); if (L < 3) return;
+  const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 8, y2 - uy * 8); g.stroke();
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 13 - uy * 6, y2 - uy * 13 + ux * 6); g.lineTo(x2 - ux * 13 + uy * 6, y2 - uy * 13 - ux * 6); g.fill();
+  if (lab) { g.font = 'italic 600 15px serif'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 14, y2 + uy * 14 + 5); }
+}
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const { v1, v2, R, m } = F(), k = Math.min(W, H) / 12, cx = W / 2, cy = H / 2;   // k — пикселей на метр
+  g.fillStyle = '#eef3f8'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(0,0,0,.06)'; for (let x = cx % k; x < W; x += k) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  for (let y = cy % k; y < H; y += k) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('клетка — 1 м', 8, H - 8);
+  // след
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  for (let tt = 0; tt <= t + 1e-9; tt += 0.25) { const [x, y] = posAt(tt); g.beginPath(); g.arc(cx + x * k, cy - y * k, 3, 0, 7); g.fill(); }
+  const [x, y] = posAt(t), px = cx + x * k, py = cy - y * k, fs = 9;              // пикселей на 1 Н
+  arrow(g, px, py, px + v1[0] * fs, py - v1[1] * fs, '#2563eb', 'F₁');
+  arrow(g, px, py, px + v2[0] * fs, py - v2[1] * fs, '#16a34a', 'F₂');
+  arrow(g, px, py, px + R[0] * fs, py - R[1] * fs, '#dc2626', 'F');
+  g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(px, py, 9, 0, 7); g.fill();
+  const Fm = Math.hypot(...R), a = Fm / m, dir = Fm > 1e-9 ? ((Math.atan2(R[1], R[0]) * 180 / Math.PI) + 360) % 360 : 0;
+  $('f1o').textContent = fmt(+$('f1').value, 1) + ' Н'; $('a1o').textContent = $('a1').value + '°';
+  $('f2o').textContent = fmt(+$('f2').value, 1) + ' Н'; $('a2o').textContent = $('a2').value + '°'; $('mo').textContent = fmt(m, 1) + ' кг';
+  $('read').innerHTML = ro('равнодействующая F', fmt(Fm) + ' Н', 'fr') + ro('направление F', Fm > 1e-9 ? fmt(dir, 0) + '°' : '—') +
+    ro('ускорение a = F/m', fmt(a) + ' м/с²') + ro('время t', fmt(t, 1) + ' с') + ro('скорость', fmt(a * t) + ' м/с');
+}
+
+function tick(ts) {
+  if (!running) return;
+  if (last !== null) t += (ts - last) / 1000;
+  last = ts;
+  // остановка у края стола: полуширина и полувысота стола в метрах
+  const [x, y] = posAt(t), c = $('c'), W = c.clientWidth, H = +(c.dataset.h || 360), k = Math.min(W, H) / 12;
+  if (Math.abs(x) > W / (2 * k) - 0.4 || Math.abs(y) > H / (2 * k) - 0.4) { running = false; $('play').textContent = '▶ Пуск'; draw(); return; }
+  draw(); requestAnimationFrame(tick);
+}
+function reset() { running = false; t = 0; $('play').textContent = '▶ Пуск'; draw(); }
+$('play').onclick = () => { running = !running; last = null; $('play').textContent = running ? '⏸ Пауза' : '▶ Пуск'; if (running) requestAnimationFrame(tick); };
+$('reset').onclick = reset;
+document.querySelectorAll('input[type=range]').forEach(i => i.oninput = reset);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

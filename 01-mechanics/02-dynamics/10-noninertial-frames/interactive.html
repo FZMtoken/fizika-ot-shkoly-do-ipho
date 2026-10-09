@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Маятник в вагоне</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .seg { display:inline-flex; border:1px solid #ccc; border-radius:8px; overflow:hidden; }
+  .seg button { font:inherit; padding:6px 14px; border:0; background:#fff; cursor:pointer; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Маятник в вагоне</h1>
+  <p class="lead">Вагон движется вправо с ускорением a. С платформы видно: нить разгоняет груз вместе с вагоном.
+    Из вагона: груз в равновесии, потому что к реальным силам добавляется сила инерции −ma.</p>
+
+  <div class="card">
+    <div class="seg" id="frame"><button data-f="ground" class="on">Смотрю с платформы</button><button data-f="wagon">Смотрю из вагона</button></div>
+    <div class="controls">
+      <label>Ускорение вагона a (+ вправо):<span id="ao"></span><input id="a" type="range" min="-8" max="8" step="0.5" value="3"></label>
+      <label>Длина маятника L:<span id="Lo"></span><input id="L" type="range" min="0.2" max="2" step="0.1" value="1"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="360"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Разгоняй вагон и смотри на маятник и воду в аквариуме. Сравни угол с arctg(a/g).</li>
+      <li>Переключайся между системами отсчёта. Какие силы видны из вагона, а какие — с платформы?</li>
+      <li>Затормози вагон (a меньше нуля). Куда теперь отклоняется маятник?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const G = 10;
+const fmt = (n, p = 1) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+let frame = 'ground';
+function arrow(g, x1, y1, x2, y2, col, lab, dash) { const L = Math.hypot(x2 - x1, y2 - y1); if (L < 4) return; const ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+  g.strokeStyle = g.fillStyle = col; g.lineWidth = 2.5; g.setLineDash(dash ? [5, 4] : []); g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2 - ux * 7, y2 - uy * 7); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - ux * 11 - uy * 5, y2 - uy * 11 + ux * 5); g.lineTo(x2 - ux * 11 + uy * 5, y2 - uy * 11 - ux * 5); g.fill();
+  g.font = '600 12px system-ui'; g.textAlign = 'center'; g.fillText(lab, x2 + ux * 16, y2 + uy * 16 + 4); }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const a = +$('a').value, L = +$('L').value, al = Math.atan2(a, G), geff = Math.hypot(G, a);
+  // вагон
+  const wx = 20, wy = 30, ww = W - 40, wh = H - 80;
+  g.fillStyle = '#eef3f8'; g.fillRect(wx, wy, ww, wh); g.strokeStyle = '#4b6a99'; g.lineWidth = 2; g.strokeRect(wx, wy, ww, wh);
+  g.fillStyle = '#333'; for (const x of [wx + 60, wx + ww - 60]) { g.beginPath(); g.arc(x, wy + wh + 12, 12, 0, 7); g.fill(); }
+  g.fillStyle = '#d9d6cc'; g.fillRect(0, wy + wh + 24, W, H);
+  arrow(g, wx + ww - 150, wy + wh + 44, wx + ww - 150 + a * 10, wy + wh + 44, '#1d1d1f', a ? 'a вагона' : '');
+  // маятник: отклоняется против ускорения
+  const px = wx + ww * 0.3, py = wy + 10, Lp = Math.min(wh - 60, 60 + L * 90);
+  const bx = px - Lp * Math.sin(al), by = py + Lp * Math.cos(al);
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.5; g.setLineDash([3, 4]); g.beginPath(); g.moveTo(px, py); g.lineTo(px, py + Lp); g.stroke(); g.setLineDash([]);
+  g.lineWidth = 2; g.beginPath(); g.moveTo(px, py); g.lineTo(bx, by); g.stroke();
+  g.fillStyle = '#dc2626'; g.beginPath(); g.arc(bx, by, 11, 0, 7); g.fill();
+  const fs = 6;          // пикселей на 1 Н для груза массой 1 кг
+  arrow(g, bx, by, bx, by + G * fs, '#16a34a', 'mg');
+  arrow(g, bx, by, bx + (px - bx) / Lp * geff * fs, by + (py - by) / Lp * geff * fs, '#2563eb', 'T');
+  if (frame === 'wagon') arrow(g, bx, by, bx - a * fs, by, '#9333ea', 'Fин = −ma', true);
+  else arrow(g, bx + 18, by + 24, bx + 18 + a * fs, by + 24, '#1d1d1f', 'ma');
+  // аквариум: поверхность перпендикулярна g_эф
+  const tx = wx + ww * 0.62, tw = Math.min(200, ww * 0.3), tb = wy + wh - 10, th = 110, level = 60;
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2; g.strokeRect(tx, tb - th, tw, th);
+  const dh = Math.tan(al) * tw / 2;        // вода поднимается у задней (левой при a > 0) стенки
+  g.fillStyle = 'rgba(37,99,235,.35)'; g.beginPath(); g.moveTo(tx, tb); g.lineTo(tx, tb - level - dh); g.lineTo(tx + tw, tb - level + dh); g.lineTo(tx + tw, tb); g.fill();
+  g.fillStyle = '#1d1d1f'; g.font = '600 13px system-ui'; g.textAlign = 'left';
+  g.fillText(frame === 'ground' ? 'Система отсчёта платформы (инерциальная)' : 'Система отсчёта вагона (неинерциальная)', wx + 10, wy + wh - 12);
+  $('ao').textContent = fmt(a) + ' м/с²'; $('Lo').textContent = fmt(L) + ' м';
+  $('read').innerHTML = ro('угол нити с вертикалью', fmt(Math.abs(al) * 180 / Math.PI) + '° ' + (a > 0 ? 'назад' : a < 0 ? 'вперёд' : '')) +
+    ro('arctg(a/g)', fmt(Math.atan(Math.abs(a) / G) * 180 / Math.PI) + '°') + ro('g эффективное', fmt(geff, 2) + ' м/с²') +
+    ro('период маятника', fmt(2 * Math.PI * Math.sqrt(L / geff), 3) + ' с') + ro('период на станции', fmt(2 * Math.PI * Math.sqrt(L / G), 3) + ' с');
+}
+$('frame').querySelectorAll('button').forEach(b => b.onclick = () => { $('frame').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); frame = b.dataset.f; draw(); });
+['a', 'L'].forEach(id => $(id).oninput = draw);
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

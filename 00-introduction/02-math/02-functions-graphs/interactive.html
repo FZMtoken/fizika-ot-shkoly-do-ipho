@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Функции и графики</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .tog { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .tog.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px 20px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка: размеры блоков не зависят от значений */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .slot[data-off] { visibility:hidden; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(10.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Функции и графики</h1>
+  <p class="lead">Выбери семейство функций и меняй параметры. Следи за особыми точками и площадью под графиком.</p>
+
+  <div class="card">
+    <div class="row" id="fam">
+      <button class="tog on" data-f="lin">y = kx + b</button>
+      <button class="tog" data-f="quad">y = ax² + bx + c</button>
+      <button class="tog" data-f="inv">y = k / x</button>
+      <button class="tog" data-f="pow">y = xⁿ</button>
+      <button class="tog" id="areaBtn">Площадь под графиком</button>
+    </div>
+    <div class="controls">
+      <label class="slot" id="s1"><i></i><span></span><input type="range"></label>
+      <label class="slot" id="s2"><i></i><span></span><input type="range"></label>
+      <label class="slot" id="s3"><i></i><span></span><input type="range"></label>
+      <label class="slot" id="s4">Конец площади X:<span></span><input type="range" min="0.5" max="5" step="0.1" value="2"></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="380"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Для y = kx + b меняй k, потом b. Что отвечает за наклон, а что за сдвиг?</li>
+      <li>Для параболы сделай так, чтобы она не пересекала ось x. Какой знак у дискриминанта?</li>
+      <li>Для y = k/x посмотри, что происходит при x, близких к нулю, и при больших x.</li>
+      <li>Включи площадь и сравни её для y = x и y = x² на отрезке от 0 до 2. Какая больше и почему?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v, c = '') => `<div class="ro"><small>${l}</small><b${c ? ` class="${c}"` : ''}>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => !isFinite(n) ? '—' : (Math.round(n * 10 ** p) / 10 ** p).toString().replace('.', ',').replace('-', '−');
+const POW = [-2, -1, 0.5, 1, 2, 3];
+const FAM = {
+  lin:  { sl: [['Наклон k', -3, 3, .1, 1], ['Сдвиг b', -4, 4, .1, 1]] },
+  quad: { sl: [['Коэффициент a', -2, 2, .1, 1], ['Коэффициент b', -4, 4, .1, 0], ['Коэффициент c', -4, 4, .1, -2]] },
+  inv:  { sl: [['Коэффициент k', -6, 6, .1, 2]] },
+  pow:  { sl: [['Степень n', 0, 5, 1, 4]] },
+};
+let fam = 'lin', area = false;
+
+function setupSliders() {
+  ['s1', 's2', 's3'].forEach((id, i) => {
+    const d = FAM[fam].sl[i], el = $(id), inp = el.querySelector('input');
+    if (!d) { el.dataset.off = ''; el.querySelector('i').textContent = '—:'; el.querySelector('span').textContent = ' '; return; }
+    delete el.dataset.off;
+    el.querySelector('i').textContent = d[0] + ':'; el.querySelector('i').style.fontStyle = 'normal';
+    Object.assign(inp, { min: d[1], max: d[2], step: d[3] }); inp.value = d[4];
+  });
+  $('s4').toggleAttribute('data-off', !area);
+}
+const P = i => +$('s' + (i + 1)).querySelector('input').value;
+
+// запись многочлена: y = x² − 2, y = −x + 1 и т. п.
+function poly(terms) {
+  let out = '';
+  for (const [c, v] of terms) {
+    if (Math.abs(c) < 1e-9) continue;
+    const a = Math.abs(c), sign = c < 0 ? '−' : '+';
+    const num = v && Math.abs(a - 1) < 1e-9 ? '' : fmt(a, 1);
+    out += out ? ` ${sign} ${num}${v}` : `${c < 0 ? '−' : ''}${num}${v}`;
+  }
+  return 'y = ' + (out || '0');
+}
+
+function fn() {
+  if (fam === 'lin') { const k = P(0), b = P(1); return { f: x => k * x + b, name: poly([[k, 'x'], [b, '']]) }; }
+  if (fam === 'quad') { const a = P(0), b = P(1), c = P(2); return { f: x => a * x * x + b * x + c, a, b, c,
+    name: poly([[a, 'x²'], [b, 'x'], [c, '']]) }; }
+  if (fam === 'inv') { const k = P(0); return { f: x => k / x, name: `y = ${fmt(k, 1)} / x`, k }; }
+  const n = POW[P(0)]; return { f: x => (n === 0.5 ? (x >= 0 ? Math.sqrt(x) : NaN) : Math.pow(x, n)), name: n === 0.5 ? 'y = √x' : `y = x^${fmt(n, 1)}`, n };
+}
+
+function integral(f, a, b) { const N = 2000, h = (b - a) / N; let s = 0; for (let i = 0; i < N; i++) s += f(a + (i + .5) * h) * h; return s; }
+
+function draw() {
+  const c = $('c'), r = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * r; c.height = H * r; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0);
+  const F = fn(), X0 = -5, X1 = 5, Y0 = -6, Y1 = 6;
+  const sx = x => (x - X0) / (X1 - X0) * W, sy = y => (Y1 - y) / (Y1 - Y0) * H;
+  g.strokeStyle = '#ecece6'; g.lineWidth = 1; g.fillStyle = '#6b6b70'; g.font = '11px system-ui'; g.textAlign = 'center';
+  for (let x = X0; x <= X1; x++) { g.beginPath(); g.moveTo(sx(x), 0); g.lineTo(sx(x), H); g.stroke(); if (x) g.fillText(x, sx(x), sy(0) + 14); }
+  for (let y = Y0; y <= Y1; y++) { g.beginPath(); g.moveTo(0, sy(y)); g.lineTo(W, sy(y)); g.stroke(); if (y) g.fillText(y, sx(0) - 10, sy(y) + 4); }
+  g.strokeStyle = '#999'; g.beginPath(); g.moveTo(0, sy(0)); g.lineTo(W, sy(0)); g.moveTo(sx(0), 0); g.lineTo(sx(0), H); g.stroke();
+  g.font = 'italic 14px serif'; g.fillText('x', W - 8, sy(0) - 6); g.fillText('y', sx(0) + 10, 12);
+
+  // площадь
+  const from = (fam === 'inv' || (fam === 'pow' && F.n < 0)) ? 1 : 0, X = +$('s4').querySelector('input').value;
+  let A = NaN;
+  if (area && X > from) {
+    A = integral(F.f, from, X);
+    g.beginPath(); g.moveTo(sx(from), sy(0));
+    for (let i = 0; i <= 200; i++) { const x = from + (X - from) * i / 200, y = Math.max(Y0, Math.min(Y1, F.f(x))); g.lineTo(sx(x), sy(y)); }
+    g.lineTo(sx(X), sy(0)); g.closePath(); g.fillStyle = 'rgba(37,99,235,.2)'; g.fill();
+  }
+
+  // график (с разрывом у гиперболы)
+  g.strokeStyle = '#1d1d1f'; g.lineWidth = 2.5; g.beginPath(); let pen = false;
+  for (let i = 0; i <= 1000; i++) {
+    const x = X0 + (X1 - X0) * i / 1000, y = F.f(x);
+    if (!isFinite(y) || Math.abs(y) > 50) { pen = false; continue; }
+    pen ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y)); pen = true;
+  }
+  g.stroke();
+
+  const dot = (x, y, col) => { if (y < Y0 || y > Y1) return; g.fillStyle = col; g.beginPath(); g.arc(sx(x), sy(y), 5, 0, 7); g.fill(); };
+  let c2 = ['', '—'], c3 = ['', '—'];
+  if (fam === 'lin') {
+    const k = P(0), b = P(1);
+    // треугольник наклона от x = 1 до x = 2
+    g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.setLineDash([4, 3]); g.beginPath();
+    g.moveTo(sx(1), sy(F.f(1))); g.lineTo(sx(2), sy(F.f(1))); g.lineTo(sx(2), sy(F.f(2))); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#dc2626'; g.font = '13px system-ui'; g.fillText('Δx = 1', sx(1.5), sy(F.f(1)) + (k >= 0 ? 16 : -8));
+    g.textAlign = 'left'; g.fillText('Δy = ' + fmt(k, 1), sx(2) + 6, sy((F.f(1) + F.f(2)) / 2) + 4); g.textAlign = 'center';
+    dot(0, b, '#2563eb');
+    c2 = ['наклон k = Δy/Δx', fmt(k, 1)]; c3 = ['пересечение с осью y', '(0; ' + fmt(b, 1) + ')'];
+  } else if (fam === 'quad') {
+    const { a, b, c } = F;
+    if (Math.abs(a) > 1e-9) {
+      const xv = -b / (2 * a), D = b * b - 4 * a * c;
+      dot(xv, F.f(xv), '#dc2626');
+      if (D >= 0) { dot((-b - Math.sqrt(D)) / (2 * a), 0, '#2563eb'); dot((-b + Math.sqrt(D)) / (2 * a), 0, '#2563eb'); }
+      c2 = ['вершина', `(${fmt(xv)}; ${fmt(F.f(xv))})`];
+      c3 = ['дискриминант D и корни', D < 0 ? `D = ${fmt(D, 1)}, корней нет` : D === 0 ? `D = 0, x = ${fmt(xv)}` :
+        `D = ${fmt(D, 1)}; ${fmt((-b - Math.sqrt(D)) / (2 * a))} и ${fmt((-b + Math.sqrt(D)) / (2 * a))}`];
+    } else { c2 = ['вершина', 'a = 0: это прямая']; }
+  } else if (fam === 'inv') {
+    c2 = ['произведение x·y', fmt(F.k, 1) + ' при любом x']; c3 = ['y(2) / y(1)', fmt(0.5, 2) + ': в 2 раза меньше'];
+    dot(1, F.f(1), '#2563eb'); dot(2, F.f(2), '#2563eb');
+  } else {
+    const n = F.n; c2 = ['степень n', fmt(n, 1)]; c3 = ['y(2) / y(1) = 2ⁿ', fmt(Math.pow(2, n), 3)];
+    dot(1, 1, '#2563eb'); dot(2, F.f(2), '#2563eb');
+  }
+
+  g.fillStyle = '#1d1d1f'; g.font = '600 14px system-ui'; g.textAlign = 'left'; g.fillText(F.name, 10, 20);
+  ['s1', 's2', 's3'].forEach((id, i) => { const d = FAM[fam].sl[i]; if (d) $(id).querySelector('span').textContent = fam === 'pow' ? 'n = ' + fmt(POW[P(0)], 1) : fmt(P(i), 1); });
+  $('s4').querySelector('span').textContent = fmt(X, 1);
+  $('read').innerHTML = ro('функция', F.name) + ro(c2[0], c2[1]) + ro(c3[0] || '—', c3[1]) +
+    ro(`площадь от ${from} до X`, area ? (X > from ? fmt(A) : '—') : 'выключена');
+}
+
+document.querySelectorAll('#fam [data-f]').forEach(b => b.onclick = () => {
+  fam = b.dataset.f; document.querySelectorAll('#fam [data-f]').forEach(x => x.classList.toggle('on', x === b));
+  setupSliders(); draw();
+});
+$('areaBtn').onclick = () => { area = !area; $('areaBtn').classList.toggle('on', area); $('s4').toggleAttribute('data-off', !area); draw(); };
+document.querySelectorAll('input[type=range]').forEach(i => i.oninput = draw);
+window.onresize = draw;
+setupSliders(); draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>

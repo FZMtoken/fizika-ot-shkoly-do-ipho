@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Температура и расширение</title>
+<style>
+  :root { --bg:#f7f7f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; padding:16px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin:.2em 0; }
+  p.lead { color:var(--muted); margin-top:0; }
+  .card { background:var(--card); border-radius:12px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); margin-bottom:14px; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px 20px; margin-top:10px; }
+  label { display:block; font-weight:600; }
+  input[type=range] { width:100%; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  .seg { display:inline-flex; flex-wrap:wrap; border:1px solid #ccc; border-radius:8px; overflow:hidden; margin:0 8px 6px 0; }
+  .seg button { border:0; border-radius:0; }
+  .seg button.on { background:var(--ink); color:#fff; }
+  canvas { width:100%; display:block; }
+  .task { border-left:4px solid #2563eb; }
+  /* Стабильная вёрстка */
+  html { overflow-y: scroll; scrollbar-gutter: stable; }
+  .controls > * { min-width: 0; }
+  label i { font-style:normal; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  label span { display:block; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+  .readout { display:grid; grid-template-columns:repeat(auto-fill, minmax(9.5em, 1fr)); gap:6px 16px; margin-top:10px; }
+  .ro { min-width:0; }
+  .ro small { display:block; color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ro b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Температура и расширение</h1>
+  <p class="lead">Слева — термометр с тремя шкалами. Справа — стержень длиной 1 м, который при 20 °C точно доходит до стенки, и биметаллическая пластинка (сталь снизу, медь сверху). Удлинение и изгиб на рисунке увеличены, числа в показаниях — настоящие.</p>
+
+  <div class="card">
+    <div class="seg" id="mat"><button data-a="12" class="on">Сталь</button><button data-a="24">Алюминий</button><button data-a="17">Медь</button><button data-a="1">Инвар</button></div>
+    <div class="controls">
+      <label><i>Температура t</i><span id="to"></span><input id="t" type="range" min="-50" max="150" step="1" value="20"></label>
+    </div>
+    <div class="row"><button id="reset">Сброс</button></div>
+  </div>
+
+  <div class="card">
+    <canvas id="c" height="340"></canvas>
+    <div class="readout" id="read"></div>
+  </div>
+
+  <div class="card task">
+    <b>Попробуй сам:</b>
+    <ol>
+      <li>Найди температуру, при которой показания по Цельсию и Фаренгейту совпадают.</li>
+      <li>Нагрей стальной стержень до 120 °C. На сколько миллиметров он удлинился? Сравни с ΔL = αL₀Δt. Повтори для алюминия и инвара.</li>
+      <li>В какую сторону изгибается биметаллическая пластинка при нагревании? А при охлаждении ниже 20 °C?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ro = (l, v) => `<div class="ro"><small>${l}</small><b>${v}</b></div>`;
+const $ = id => document.getElementById(id);
+const fmt = (n, p = 2) => { const v = Math.round(n * 10 ** p) / 10 ** p; return (Object.is(v, -0) ? 0 : v).toString().replace('.', ',').replace('-', '−'); };
+const T0 = 20, EX = 150;                                 // при 20 °C стержень касается стенки; удлинение на рисунке ×150
+let alpha = 12e-6, t = 0, running = false;               // t и running нужны только для общей проверки интерактивов
+
+function draw() {
+  const c = $('c'), dpr = devicePixelRatio || 1, W = c.clientWidth, H = +(c.dataset.h ||= c.getAttribute('height'));
+  c.width = W * dpr; c.height = H * dpr; c.style.height = H + 'px';
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const tc = +$('t').value, top = 24, bot = H - 30, Y = x => bot - (bot - top) * (x + 50) / 200;      // шкала от −50 до 150 °C
+  // термометр
+  const tx = 70;
+  g.fillStyle = '#f1f5f9'; g.strokeStyle = '#94a3b8'; g.lineWidth = 1.5; g.beginPath(); g.roundRect(tx - 7, top - 8, 14, bot - top + 16, 7); g.fill(); g.stroke();
+  g.beginPath(); g.arc(tx, bot + 14, 12, 0, 7); g.fillStyle = '#dc2626'; g.fill();
+  g.fillStyle = '#dc2626'; g.fillRect(tx - 3, Y(tc), 6, bot + 6 - Y(tc));
+  g.font = '10px system-ui'; g.lineWidth = 1; g.strokeStyle = '#64748b';
+  for (let x = -40; x <= 140; x += 20) { const y = Y(x); g.beginPath(); g.moveTo(tx - 12, y); g.lineTo(tx - 7, y); g.stroke(); g.fillStyle = '#334155'; g.textAlign = 'right'; g.fillText(x, tx - 14, y + 3); }
+  for (let K = 240; K <= 420; K += 40) { const y = Y(K - 273); g.beginPath(); g.moveTo(tx + 7, y); g.lineTo(tx + 12, y); g.stroke(); g.textAlign = 'left'; g.fillText(K, tx + 14, y + 3); }
+  for (let F = -40; F <= 300; F += 40) { const x = (F - 32) / 1.8; if (x < -50 || x > 150) continue; const y = Y(x); g.beginPath(); g.moveTo(tx + 40, y); g.lineTo(tx + 45, y); g.stroke(); g.textAlign = 'left'; g.fillText(F, tx + 48, y + 3); }
+  g.font = '600 11px system-ui'; g.textAlign = 'center'; g.fillStyle = '#1d1d1f'; g.fillText('°C', tx - 24, top - 10); g.fillText('К', tx + 22, top - 10); g.fillText('°F', tx + 56, top - 10);
+  // стержень
+  const rx = 160, rw = Math.max(120, W - rx - 50), dL = alpha * 1 * (tc - T0), ry = 70, wall = rx + rw;
+  g.fillStyle = '#d9d6cc'; g.fillRect(rx - 10, ry - 30, 10, 60); g.fillRect(wall, ry - 30, 10, 60);
+  const len = rw + dL * EX * rw;                                                     // удлинение в долях: ΔL/L₀ × масштаб
+  g.fillStyle = '#64748b'; g.fillRect(rx, ry - 8, Math.min(len, rw + 40), 16);
+  if (len > rw) { g.fillStyle = 'rgba(220,38,38,.6)'; g.fillRect(wall, ry - 8, Math.min(len - rw, 40), 16); }
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.textAlign = 'left'; g.fillText('стержень 1 м при 20 °C', rx, ry - 14);
+  g.fillText(len > rw ? 'упирается в стенку' : len < rw ? 'зазор у стенки' : 'касается стенки', rx, ry + 26);
+  // биметаллическая пластинка: изгиб ∝ разности расширений
+  const by = 180, bl = Math.min(rw, 360), kap = 1.5 * (17e-6 - 12e-6) * (tc - T0) / 0.001 * 1.2;   // кривизна (толщина 1 мм), на рисунке условно
+  g.fillStyle = '#d9d6cc'; g.fillRect(rx - 10, by - 30, 10, 60);
+  const strip = (off, col) => { g.strokeStyle = col; g.lineWidth = 5; g.beginPath();          // off > 0 — верхний слой
+    const k = kap / 1000;
+    for (let j = 0; j <= 60; j++) { const s = bl * j / 60, phi = k * s, x = Math.abs(k) < 1e-9 ? rx + s : rx + Math.sin(phi) / k, y = Math.abs(k) < 1e-9 ? by : by + (1 - Math.cos(phi)) / k;
+      const nx = Math.sin(phi), ny = -Math.cos(phi); j ? g.lineTo(x + nx * off, y + ny * off) : g.moveTo(x + nx * off, y + ny * off); } g.stroke(); };
+  strip(-2.5, '#64748b'); strip(2.5, '#c2410c');   // нагрев: медь длиннее — пластинка выгибается вниз, к стали
+  g.fillStyle = '#334155'; g.font = '11px system-ui'; g.fillText('биметалл: медь (сверху) + сталь', rx, by + 46);
+  // показания
+  $('to').textContent = tc + ' °C';
+  $('read').innerHTML = ro('по Кельвину', fmt(tc + 273, 0) + ' К') + ro('по Фаренгейту', fmt(1.8 * tc + 32, 1) + ' °F') +
+    ro('α материала', fmt(alpha * 1e6, 0) + '·10⁻⁶ 1/К') + ro('ΔL стержня', fmt(dL * 1000, 2) + ' мм') + ro('Δt от 20 °C', fmt(tc - T0, 0) + ' К');
+}
+
+$('mat').querySelectorAll('button').forEach(b => b.onclick = () => { $('mat').querySelectorAll('button').forEach(z => z.classList.toggle('on', z === b)); alpha = +b.dataset.a * 1e-6; draw(); });
+$('t').oninput = draw;
+$('reset').onclick = () => { $('t').value = 20; draw(); };
+window.onresize = draw;
+draw();
+</script>
+<script>(function(){if(window.parent===window)return;document.documentElement.style.overflowY='hidden';
+var st=document.createElement('style');st.textContent='.task,h1{display:none!important}body{padding-top:8px!important}';document.head.appendChild(st);
+var s=function(){parent.postMessage({type:'interactive-height',h:document.documentElement.scrollHeight},'*')};
+addEventListener('load',s);addEventListener('resize',s);if(window.ResizeObserver)new ResizeObserver(s).observe(document.body);s();})();</script>
+</body>
+</html>
